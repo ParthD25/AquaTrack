@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "27553399266",
+    "firebase_url": "https://aquatrack-5469f-default-rtdb.firebaseio.com",
+    "project_id": "aquatrack-5469f",
+    "storage_bucket": "aquatrack-5469f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:27553399266:android:cf821653df59adc5f879bb",
+        "android_client_info": {
+          "package_name": "com.sfac.aquatrack"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "27553399266-8t3gvrld2s31l52lv0ha2i5fa5b0kiqp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhpEIt_jrLH7jGkZtgrZGoS5Sq0Uh8s8M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "27553399266-8t3gvrld2s31l52lv0ha2i5fa5b0kiqp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
