@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { DEFAULT_SHIFTS, AUDIT_TYPES } from '@/lib/types';
 import { format } from 'date-fns';
 import { db } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect } from 'react';
 
 const DEMO_TASKS = [
@@ -61,11 +61,13 @@ function getNextShift() {
 export default function DashboardPage() {
   const { user, hasRole } = useAuth();
   const [tasks, setTasks] = useState(DEMO_TASKS);
+  const [completions, setCompletions] = useState<Record<string, any>>({});
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [totalStaff, setTotalStaff] = useState(38);
   const [auditsNeeded, setAuditsNeeded] = useState<{name: string, missing: string[]}[]>(DEMO_AUDITS_NEEDED);
 
   useEffect(() => {
+    // 1. Fetch Staff Stats
     async function fetchStats() {
       try {
         const snap = await getDocs(collection(db, 'staff'));
@@ -73,7 +75,7 @@ export default function DashboardPage() {
         const needed: {name: string, missing: string[]}[] = [];
         snap.docs.forEach(d => {
           const s = d.data();
-          if (s.status === 'former' || s.status === 'inactive') return; // Only count active for audits
+          if (s.status === 'former' || s.status === 'inactive') return;
           const missing: string[] = [];
           AUDIT_TYPES.forEach(t => {
             if (!s.audits || !s.audits[t.key]?.completed) {
@@ -88,18 +90,52 @@ export default function DashboardPage() {
       } catch (e) { console.error('Dashboard fetch error', e); }
     }
     fetchStats();
+
+    // 2. Real-Time Task Listener
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const qTask = query(collection(db, 'task_completions'), where('dateStr', '==', todayStr));
+    const unsubTasks = onSnapshot(qTask, (snap) => {
+      const comps: Record<string, any> = {};
+      snap.forEach(d => {
+        comps[d.data().taskId] = d.data();
+      });
+      setCompletions(comps);
+    });
+
+    return () => unsubTasks();
   }, []);
 
   const now = new Date();
   const currentShift = getCurrentShift();
   const nextShift = getNextShift();
-  const completedTasks = tasks.filter((t) => t.done).length;
+  
+  const augmentedTasks = tasks.map(t => ({
+    ...t,
+    done: !!completions[t.id],
+    completedBy: completions[t.id]?.completedBy,
+    timestamp: completions[t.id]?.timestamp
+  }));
+  
+  const completedTasks = augmentedTasks.filter((t) => t.done).length;
   const totalTasks = tasks.length;
 
-  const filteredTasks = selectedFilter === 'all' ? tasks : tasks.filter((t) => !t.done && t.priority === selectedFilter || t.category === selectedFilter);
-
-  const toggleTask = (id: string) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, done: !t.done } : t));
+  const toggleTask = async (id: string, currentlyDone: boolean) => {
+    if (!user) return;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const docId = `${id}_${todayStr}`;
+    if (currentlyDone) {
+      // Uncheck
+      await deleteDoc(doc(db, 'task_completions', docId));
+    } else {
+      // Check
+      await setDoc(doc(db, 'task_completions', docId), {
+        taskId: id,
+        dateStr: todayStr,
+        timestamp: new Date().toISOString(),
+        completedBy: user.displayName,
+        userId: user.uid,
+      });
+    }
   };
 
   const PRIORITY_COLOR: Record<string, string> = { high: 'var(--red-400)', medium: 'var(--amber-400)', low: 'var(--teal-400)' };
@@ -190,14 +226,14 @@ export default function DashboardPage() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {tasks.map((task) => (
+            {augmentedTasks.map((task) => (
               <div
                 key={task.id}
                 className={`checklist-item ${task.done ? 'done' : ''}`}
-                onClick={() => toggleTask(task.id)}
+                onClick={() => toggleTask(task.id, task.done)}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && toggleTask(task.id)}
+                onKeyDown={(e) => e.key === 'Enter' && toggleTask(task.id, task.done)}
               >
                 <div className={`checkbox ${task.done ? 'checked' : ''}`}>
                   {task.done && (
@@ -211,6 +247,11 @@ export default function DashboardPage() {
                   <div className="text-sm font-medium" style={{ textDecoration: task.done ? 'line-through' : 'none', opacity: task.done ? 0.6 : 1 }}>
                     {task.title}
                   </div>
+                  {task.done && (
+                    <div className="text-xs text-muted mt-1" style={{ opacity: 0.8 }}>
+                      Completed by <strong style={{ color: 'var(--text-accent)' }}>{task.completedBy}</strong> at {format(new Date(task.timestamp), 'h:mm a')}
+                    </div>
+                  )}
                 </div>
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: PRIORITY_COLOR[task.priority], flexShrink: 0 }} />
               </div>
@@ -226,8 +267,31 @@ export default function DashboardPage() {
 
         {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {/* Audit Alerts - only for admin/sr_guard */}
+          {/* Live Activity Feed - Admin & Sr. Guard */}
           {hasRole('admin', 'sr_guard') && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="section-title flex items-center gap-2">
+                  <div className="status-dot green animate-pulse"></div> Live Task Feed
+                </h2>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto' }}>
+                {Object.values(completions).sort((a, b) => b.timestamp.localeCompare(a.timestamp)).map(c => {
+                   const taskDef = tasks.find(t => t.id === c.taskId);
+                   return (
+                     <div key={c.taskId} style={{ fontSize: '0.875rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 8 }}>
+                       <span style={{ color: 'var(--text-accent)', fontWeight: 'bold' }}>{c.completedBy}</span> completed <strong>{taskDef?.title || 'a task'}</strong>
+                       <div className="text-xs text-muted mt-1">{format(new Date(c.timestamp), 'h:mm a')}</div>
+                     </div>
+                   );
+                })}
+                {Object.keys(completions).length === 0 && <div className="text-sm text-muted">No shift task activity yet today.</div>}
+              </div>
+            </div>
+          )}
+
+          {/* Audit Alerts - only for admin/sr_guard */}
+          {hasRole('admin', 'sr_guard') && auditsNeeded.length > 0 && (
             <div className="card">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="section-title">⚠️ Audits Needed</h2>

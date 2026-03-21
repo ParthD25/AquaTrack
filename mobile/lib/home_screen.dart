@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -11,6 +12,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  bool _hasAgreed = false;
+  bool _isLoadingAgreement = true;
+  StreamSubscription<DocumentSnapshot>? _userSub;
 
   final List<Widget> _pages = [
     const _DashboardTab(),
@@ -20,7 +24,111 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userSub = FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots().listen((docSnap) {
+        if (docSnap.exists) {
+          final data = docSnap.data() as Map<String, dynamic>;
+          setState(() {
+            _hasAgreed = data['hasAgreedToTerms'] == true;
+            _isLoadingAgreement = false;
+          });
+        }
+      });
+    } else {
+      setState(() => _isLoadingAgreement = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _agreeToTerms() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
+        {'hasAgreedToTerms': true}, 
+        SetOptions(merge: true)
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoadingAgreement) {
+      return const Scaffold(backgroundColor: Color(0xFF0A1530), body: Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF))));
+    }
+
+    if (!_hasAgreed) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A1530),
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF132040),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 48),
+                    const SizedBox(height: 16),
+                    const Text('CONFIDENTIALITY & DUTY TO ACT', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    const Expanded(
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          'AMERICAN RED CROSS STANDARD OF CARE:\nBy accessing this system, you acknowledge and agree to uphold the American Red Cross standard of care for professional lifeguards. You recognize your legal Duty to Act while on active duty at the Silliman Activity and Family Aquatic Center (City of Newark: https://www.newark.org/departments/recreation-and-community-services/silliman-activity-and-family-aquatic-center).\n\nSTRICT CONFIDENTIALITY:\nThis application, including all medical Incident Reports, Rescue documentation, Employee certifications, and internal facility operations, contains highly confidential information that is legally privileged. If you are not an active, authorized employee, you are legally notified that any unauthorized disclosure, photography, copying, distribution, or use of any information contained within this system is strictly prohibited by law.',
+                          style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.6),
+                          textAlign: TextAlign.justify,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => FirebaseAuth.instance.signOut(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Colors.white24),
+                            ),
+                            child: const Text('Disagree / Exit', style: TextStyle(color: Colors.white70)),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _agreeToTerms,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.redAccent,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('I Agree', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,

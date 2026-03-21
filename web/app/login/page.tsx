@@ -138,6 +138,14 @@ export default function LoginPage() {
             Need access? Contact your administrator.
           </p>
         </div>
+
+        {/* Global Confidentiality Disclaimer */}
+        <div style={{ marginTop: 24, padding: '16px 20px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, textAlign: 'center' }}>
+          <p className="text-xs text-muted" style={{ lineHeight: 1.5, marginBottom: 0 }}>
+            <strong style={{ color: 'var(--text-primary)' }}>CONFIDENTIALITY NOTICE:</strong> This website, and any documents, files or previous messages attached to it, may contain confidential information that is legally privileged. If you are not the intended recipient, or person responsible for delivering it to the intended recipient, you are hereby notified that any disclosure, copying, distribution or use of any of the information contained in or attached to this website is strictly prohibited. If you have reached this website in error, please advise the sender by e-mail, and leave this website immediately.
+          </p>
+        </div>
+
       </div>
 
       <style jsx>{`

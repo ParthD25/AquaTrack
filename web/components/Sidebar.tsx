@@ -54,7 +54,7 @@ export default function Sidebar() {
 
   if (!user) return null;
 
-  const initials = user.displayName
+  const initials = (user.displayName || 'U')
     .split(' ')
     .map((n: string) => n[0])
     .join('')

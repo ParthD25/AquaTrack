@@ -32,12 +32,16 @@ const CATEGORIES: { key: DocCategory; label: string; icon: string }[] = [
 ];
 
 const getFileType = (filename: string, url: string) => {
+  if (url && url.includes('forms')) return 'gform';
+  if (url && url.includes('presentation')) return 'gslides';
+  if (url && url.includes('folders')) return 'gfolder';
+  if (url && url.includes('document')) return 'gdoc';
   if (url && (url.includes('docs.google.com') || url.includes('drive.google.com'))) return 'gsheet';
   const parts = filename.split('.');
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'doc';
 };
 
-const FILE_COLORS: Record<string, string> = { pdf: '#f87171', docx: '#4285f4', xlsx: '#22c55e', pptx: '#f97316', pd: '#f87171', doc: '#4285f4', gsheet: '#22c55e', mp4: '#a855f7' };
+const FILE_COLORS: Record<string, string> = { pdf: '#f87171', docx: '#4285f4', xlsx: '#22c55e', pptx: '#f97316', pd: '#f87171', doc: '#4285f4', gsheet: '#22c55e', mp4: '#a855f7', gform: '#c084fc', gfolder: '#94a3b8', gfile: '#4285f4', gslides: '#f59e0b', gdoc: '#4285f4', link: '#94a3b8' };
 
 export default function DocumentsPage() {
   const { user, hasRole } = useAuth();
@@ -192,23 +196,20 @@ export default function DocumentsPage() {
       {/* Embedded Document Viewer Modal */}
       {isViewerOpen && viewDoc && (
         <div className="modal-overlay" onClick={() => setIsViewerOpen(false)}>
-          <div className="modal" style={{ maxWidth: '90vw', height: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ width: '90vw', maxWidth: 1200, height: '90vh', display: 'flex', flexDirection: 'column', padding: 24 }} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">{viewDoc.name}</h2>
               <button onClick={() => setIsViewerOpen(false)} className="btn btn-ghost btn-sm">Close</button>
             </div>
             
-            <div style={{ flex: 1, background: '#f8fafc', borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
-              {viewDoc.fileType === 'pdf' && (
+            <div style={{ flex: 1, background: '#f8fafc', borderRadius: 8, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
+              {['pdf', 'gsheet', 'gform', 'gdoc', 'gslides', 'gfolder', 'link'].includes(viewDoc.fileType) && (
                 <iframe src={viewDoc.url} style={{ width: '100%', height: '100%', border: 'none' }} title={viewDoc.name} />
               )}
               {viewDoc.fileType === 'mp4' && (
-                <video src={viewDoc.url} controls style={{ width: '100%', height: '100%', outline: 'none' }} />
+                <video src={viewDoc.url} controls style={{ width: '100%', height: '100%', outline: 'none', background: '#000' }} />
               )}
-              {viewDoc.fileType === 'gsheet' && (
-                <iframe src={viewDoc.url} style={{ width: '100%', height: '100%', border: 'none' }} title={viewDoc.name} />
-              )}
-              {(viewDoc.fileType === 'docx' || viewDoc.fileType === 'xlsx' || viewDoc.fileType === 'pptx' || viewDoc.fileType === 'doc') && (
+              {['docx', 'xlsx', 'pptx', 'doc'].includes(viewDoc.fileType) && (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center' }}>
                   <FileIcon size={48} color={FILE_COLORS[viewDoc.fileType]} className="mb-4" />
                   <h3 className="text-lg font-bold text-slate-900 mb-2">Office Document Preview</h3>
@@ -221,6 +222,15 @@ export default function DocumentsPage() {
                   <p className="text-xs text-slate-500 mt-6 max-w-sm">
                     Admin Tip: To enable live collaborative viewing, upload your Roster/Doc to Google Workspace, then click "Convert to Web Link" on the document card to swap this file with its live Google Docs link.
                   </p>
+                </div>
+              )}
+              {!['pdf', 'gsheet', 'gform', 'gdoc', 'gslides', 'gfolder', 'link', 'mp4', 'docx', 'xlsx', 'pptx', 'doc'].includes(viewDoc.fileType) && (
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center' }}>
+                  <FileIcon size={48} color="#888" className="mb-4" />
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">Download Required</h3>
+                  <a href={viewDoc.url} download className="btn btn-primary mt-4">
+                    <Download size={16} /> Download File
+                  </a>
                 </div>
               )}
             </div>

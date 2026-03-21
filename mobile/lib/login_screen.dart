@@ -255,6 +255,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white54, fontSize: 13),
                     ),
+                    const SizedBox(height: 32),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.03),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: const Text(
+                        'CONFIDENTIALITY NOTICE: This application, and any documents, files or previous messages attached to it, may contain confidential information that is legally privileged. If you are not the intended recipient, or person responsible for delivering it to the intended recipient, you are hereby notified that any disclosure, copying, distribution or use of any of the information contained in or attached to this application is strictly prohibited. If you have reached this application in error, please advise the sender by e-mail, and leave this application immediately.',
+                        style: TextStyle(color: Colors.white54, fontSize: 10, height: 1.5),
+                        textAlign: TextAlign.justify,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
