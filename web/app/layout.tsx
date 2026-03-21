@@ -1,21 +1,32 @@
 import type { Metadata } from 'next';
+import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
-import '@/app/globals.css';
+import AIChatWidget from '@/components/AIChatWidget';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 export const metadata: Metadata = {
   title: 'AquaTrack — Aquatics Management Platform',
-  description: 'Professional aquatics management for lifeguard audits, shift tasks, training, and document control.',
+  description: 'Role-aware task management, audit tracking, and documents for SFAC Aquatics.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <AuthProvider>
+            {children}
+            <AIChatWidget />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

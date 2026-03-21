@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { ThemeToggle } from './ThemeToggle';
 
 const NAV_SECTIONS = [
   {
@@ -121,6 +122,9 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="sidebar-footer">
+        <div style={{ marginBottom: 16 }}>
+          <ThemeToggle />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <div className="avatar avatar-sm">{initials}</div>
           <div style={{ flex: 1, minWidth: 0 }}>

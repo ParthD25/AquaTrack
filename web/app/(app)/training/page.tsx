@@ -1,95 +1,115 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { FileIcon, Play, CheckSquare, Eye } from 'lucide-react';
 
-const POOL_TECH_MODULES = [
-  {
-    id: '1', icon: '🧪', title: 'Chemical Safety Procedures',
-    desc: 'Handling, storage, dosing, and emergency procedures for pool chemicals.',
-    topics: ['Chlorine handling', 'pH adjustment', 'Acid safety', 'Spill response'],
-    status: 'available', type: 'video',
-  },
-  {
-    id: '2', icon: '🔧', title: 'Equipment Inspection Checklists',
-    desc: 'Systematic inspection procedures for all pool deck and mechanical room equipment.',
-    topics: ['Pump systems', 'Filter systems', 'Heater check', 'Pressure gauges'],
-    status: 'available', type: 'pdf',
-  },
-  {
-    id: '3', icon: '📊', title: 'Cleaning Probes & Calibration',
-    desc: 'How to clean, maintain, and calibrate chemical probes for accurate readings.',
-    topics: ['pH probe cleaning', 'ORP calibration', 'Turbidity sensors', 'Log entries'],
-    status: 'available', type: 'video',
-  },
-  {
-    id: '4', icon: '🛡️', title: 'PPE Review & Proper Usage',
-    desc: 'Required personal protective equipment for all pool tech tasks.',
-    topics: ['Glove selection', 'Eye protection', 'Chemical aprons', 'Respirators'],
-    status: 'available', type: 'pdf',
-  },
-  {
-    id: '5', icon: '🚨', title: 'Emergency Equipment Checks',
-    desc: 'Daily verification procedures for AED, oxygen, first aid, and rescue equipment.',
-    topics: ['AED battery', 'O2 pressure', 'First aid inventory', 'Rescue tubes'],
-    status: 'available', type: 'checklist',
-  },
-  {
-    id: '6', icon: '🌊', title: 'Waterslide Operation & Inspection',
-    desc: 'Safe operation, pre-open inspection, and post-close procedures for waterslides.',
-    topics: ['Pre-open checklist', 'Flow rate settings', 'Safety rules', 'Shut-down'],
-    status: 'filming', type: 'video',
-  },
-  {
-    id: '7', icon: '🔩', title: 'Basic Troubleshooting Guide',
-    desc: 'Common pool equipment issues and step-by-step troubleshooting for pool techs.',
-    topics: ['Low pressure', 'Cloudy water', 'Heater faults', 'Valve issues'],
-    status: 'available', type: 'pdf',
-  },
-  {
-    id: '8', icon: '📅', title: 'Daily Task List & Maintenance Log',
-    desc: 'New daily task structure for cleaning and maintenance across shifts.',
-    topics: ['Opening tasks', 'Throughout-shift', 'Monthly checks', 'Documentation'],
-    status: 'available', type: 'checklist',
-  },
-];
+interface TrainingModule {
+  id: string;
+  title: string;
+  desc: string;
+  type: 'video' | 'pdf' | 'checklist' | 'docx' | 'xlsx' | 'doc';
+  url: string;
+  status: 'available' | 'filming';
+}
 
-const TYPE_ICON: Record<string, string> = { video: '🎬', pdf: '📄', checklist: '☑' };
-const TYPE_COLOR: Record<string, string> = { video: 'var(--purple-400)', pdf: 'var(--red-400)', checklist: 'var(--green-400)' };
+const TYPE_ICON: Record<string, string> = { video: '🎬', pdf: '📄', checklist: '☑', mp4: '🎬', docx: '📝', xlsx: '📊', doc: '📝' };
+const TYPE_COLOR: Record<string, string> = { video: 'var(--purple-400)', mp4: 'var(--purple-400)', pdf: 'var(--red-400)', checklist: 'var(--green-400)', docx: 'var(--aqua-400)', xlsx: 'var(--green-500)', doc: 'var(--aqua-400)' };
+
+const getFileType = (filename: string) => {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'doc';
+};
 
 export default function TrainingPage() {
   const { hasRole } = useAuth();
   const [activeFilter, setActiveFilter] = useState<'all' | 'video' | 'pdf' | 'checklist'>('all');
+  const [modules, setModules] = useState<TrainingModule[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (!hasRole('admin', 'sr_guard', 'pool_tech')) {
+  useEffect(() => {
+    const fetchTraining = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'documents'));
+        const trainingDocs: TrainingModule[] = [];
+        
+        snap.forEach(d => {
+          const data = d.data();
+          if (data.category === 'pool_tech' || data.category === 'training') {
+            const ftype = getFileType(data.title);
+            let unifiedType: 'video' | 'pdf' | 'checklist' | 'docx' | 'xlsx' | 'doc' = 'doc';
+            
+            if (ftype === 'mp4' || ftype === 'mov') unifiedType = 'video';
+            else if (ftype === 'pdf') unifiedType = 'pdf';
+            else if (ftype === 'docx') unifiedType = 'docx';
+            else if (ftype === 'xlsx') unifiedType = 'xlsx';
+            
+            if (data.title.toLowerCase().includes('checklist')) unifiedType = 'checklist';
+
+            trainingDocs.push({
+              id: d.id,
+              title: data.title,
+              desc: `Category: ${data.category === 'pool_tech' ? 'Pool Technician' : 'General Training'}`,
+              type: unifiedType,
+              url: data.url,
+              status: 'available'
+            });
+          }
+        });
+
+        // Add 2 placeholder "filming" videos for visual fidelity of the system
+        trainingDocs.push({
+          id: 'placeholder-1',
+          title: 'Waterslide Operation & Inspection',
+          desc: 'Safe operation, pre-open inspection, and post-close procedures.',
+          type: 'video',
+          url: '#',
+          status: 'filming'
+        });
+
+        setModules(trainingDocs);
+      } catch (err) {
+        console.error('Failed to load training modules', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTraining();
+  }, []);
+
+  if (!hasRole('admin', 'sr_guard', 'pool_tech', 'lifeguard')) {
     return (
       <div className="page-container">
         <div className="empty-state">
           <div className="empty-state-icon">🔒</div>
           <p className="font-semibold">Access Restricted</p>
-          <p className="text-sm text-muted">Pool Tech Training is for Pool Technicians, Senior Guards, and Admins.</p>
+          <p className="text-sm text-muted">Please log in to view training modules.</p>
         </div>
       </div>
     );
   }
 
-  const filtered = POOL_TECH_MODULES.filter(m => activeFilter === 'all' || m.type === activeFilter);
+  const filtered = modules.filter(m => activeFilter === 'all' || m.type === activeFilter || (activeFilter === 'video' && m.type === 'video') || (activeFilter === 'pdf' && m.type === 'pdf') || (activeFilter === 'checklist' && m.type === 'checklist'));
+
+  if (loading) {
+     return <div className="page-container flex justify-center items-center" style={{ minHeight: '50vh' }}>
+      <div className="spinner"></div>
+    </div>;
+  }
 
   return (
     <div className="page-container animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="page-title">Pool Tech Training</h1>
+          <h1 className="page-title">Training Modules</h1>
           <p className="page-subtitle">
-            Video guides, checklists, and reference materials for pool operations
+            Video guides, checklists, and references for daily operations
           </p>
         </div>
-        {hasRole('admin') && (
-          <button className="btn btn-primary btn-sm">+ Add Module</button>
-        )}
       </div>
 
-      {/* Note about filming */}
       <div style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 24, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span>📸</span>
         <p className="text-sm text-secondary">
@@ -97,7 +117,6 @@ export default function TrainingPage() {
         </p>
       </div>
 
-      {/* Filter */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {[
           { key: 'all', label: '📚 All Modules' },
@@ -117,7 +136,7 @@ export default function TrainingPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
         {filtered.map(mod => (
-          <div key={mod.id} className="card training-card" style={{ position: 'relative' }}>
+          <div key={mod.id} className="card training-card" style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
             {mod.status === 'filming' && (
               <div style={{
                 position: 'absolute', top: 12, right: 12,
@@ -130,26 +149,21 @@ export default function TrainingPage() {
             )}
 
             <div className="flex items-start gap-3 mb-3">
-              <div style={{ fontSize: '2rem', flexShrink: 0 }}>{mod.icon}</div>
+              <div style={{ fontSize: '2rem', flexShrink: 0 }}>{TYPE_ICON[mod.type] || '📄'}</div>
               <div>
-                <div className="font-semibold text-sm">{mod.title}</div>
+                <div className="font-semibold text-sm" style={{ paddingRight: mod.status === 'filming' ? 60 : 0 }}>{mod.title}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  <span style={{ fontSize: '0.75rem', color: TYPE_COLOR[mod.type] }}>
-                    {TYPE_ICON[mod.type]} {mod.type.charAt(0).toUpperCase() + mod.type.slice(1)}
+                  <span style={{ fontSize: '0.75rem', color: TYPE_COLOR[mod.type] || 'var(--aqua-400)', fontWeight: 600, textTransform: 'uppercase' }}>
+                     {mod.type} Module
                   </span>
                 </div>
               </div>
             </div>
 
-            <p className="text-xs text-secondary mb-3" style={{ lineHeight: 1.6 }}>{mod.desc}</p>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 14 }}>
-              {mod.topics.map(t => (
-                <span key={t} className="badge badge-neutral" style={{ padding: '1px 7px', fontSize: '0.65rem' }}>{t}</span>
-              ))}
-            </div>
+            <p className="text-xs text-secondary mb-4" style={{ lineHeight: 1.6, flex: 1 }}>{mod.desc}</p>
 
             <button
+              onClick={() => { if(mod.status !== 'filming') window.open(mod.url, '_blank'); }}
               className={`btn btn-sm ${mod.status === 'filming' ? 'btn-secondary' : 'btn-primary'}`}
               style={{ width: '100%' }}
               disabled={mod.status === 'filming'}
@@ -161,7 +175,7 @@ export default function TrainingPage() {
       </div>
 
       <style jsx>{`
-        .training-card { transition: all 200ms; }
+        .training-card { transition: all 200ms; height: 100%; }
         .training-card:hover { transform: translateY(-2px); box-shadow: var(--glow-aqua); }
       `}</style>
     </div>
