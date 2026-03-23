@@ -211,7 +211,9 @@ export interface StaffMember {
   isHighSchool?: boolean;
   gradYear?: number;
   certifications?: string[];
+  certExpirations?: Record<string, string>; // mapping certification name to ISO date
   hireDate?: string;
+  status?: 'active' | 'inactive' | 'former';
   orgId: string;
 }
 

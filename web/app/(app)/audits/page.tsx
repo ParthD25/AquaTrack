@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { AUDIT_TYPES, AuditType } from '@/lib/types';
 import { format } from 'date-fns';
@@ -18,6 +19,7 @@ const CURRENT_SEASON = 'Summer 2026';
 // staff data populated from firestore
 
 export default function AuditsPage() {
+  const router = useRouter();
   const { user, hasRole } = useAuth();
   const [activeType, setActiveType] = useState<AuditType>('vat');
   const [search, setSearch] = useState('');
@@ -122,8 +124,10 @@ export default function AuditsPage() {
         </div>
         <div className="flex gap-2">
           <button className="btn btn-secondary btn-sm">⬇ Export</button>
-          {hasRole('admin') && (
-            <button className="btn btn-secondary btn-sm">+ Add Staff</button>
+          {hasRole('admin', 'sr_guard') && (
+            <button className="btn btn-primary btn-sm" onClick={() => router.push('/audits/new-vat')}>
+              + Conduct Live Test
+            </button>
           )}
         </div>
       </div>
