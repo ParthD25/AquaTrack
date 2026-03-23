@@ -411,12 +411,15 @@ export interface DocumentTemplate {
 export interface DocumentArchive {
   id: string;
   archiveName: string;
-  sourceFolder: string;
+  sourcePath?: string;
+  sourceFolder?: string;
   importDate: string;
-  importedBy: string;
+  importedBy?: string;
+  importedFiles: number;
   totalFiles: number;
-  documents: string[]; // document IDs
-  status: 'pending' | 'importing' | 'complete' | 'failed';
+  documents?: string[]; // document IDs
+  status: 'pending' | 'importing' | 'in_progress' | 'complete' | 'failed' | 'error';
+  category: string;
   notes?: string;
   errorLog?: string;
 }
