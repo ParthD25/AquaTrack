@@ -480,7 +480,13 @@ class _DocsTab extends StatefulWidget {
 
 class _DocsTabState extends State<_DocsTab> {
   String _activeCategory = 'all';
-  int _activeYear = 0;
+  late String _userRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _userRole = widget.role;
+  }
 
   bool _canAccessDoc(String accessLevel) {
     const order = ['lifeguard', 'pool_tech', 'sr_guard', 'admin'];
@@ -492,23 +498,13 @@ class _DocsTabState extends State<_DocsTab> {
 
   @override
   Widget build(BuildContext context) {
-    const categories = [
-      {'key': 'all', 'label': 'All'},
-      {'key': 'staff_forms', 'label': 'Staff Forms'},
-      {'key': 'checklists', 'label': 'Checklists'},
-      {'key': 'senior_lg', 'label': 'Senior LG'},
-      {'key': 'pool_tech', 'label': 'Pool Tech'},
-      {'key': 'training', 'label': 'Training'},
-      {'key': 'audits', 'label': 'Audits'},
-    ];
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Document Library', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF132040),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('documents').snapshots(),
+        stream: FirebaseFirestore.instance.collection('documents_library').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF)));
@@ -520,26 +516,32 @@ class _DocsTabState extends State<_DocsTab> {
           final docs = snapshot.data?.docs
               .map((d) => d.data() as Map<String, dynamic>)
               .where((d) {
-                final access = (d['accessLevel'] ?? 'lifeguard') as String;
-                return _canAccessDoc(access);
+                // Filter by access roles - check if user's role is in the accessRoles array
+                final accessRoles = (d['accessRoles'] as List<dynamic>?) ?? [];
+                return _canAccessDoc('') || accessRoles.contains(_userRole);
               })
               .toList() ?? [];
 
-          final years = docs
-              .map((d) => d['year'])
-              .where((y) => y is int)
-              .cast<int>()
-              .toSet()
-              .toList()
-            ..sort((a, b) => b.compareTo(a));
+          final categories = <String>{'all'};
+          for (var doc in docs) {
+            final cat = doc['category'] as String?;
+            if (cat != null && cat.isNotEmpty) {
+              categories.add(cat);
+            }
+          }
 
           final filtered = docs.where((d) {
-            final category = d['category'] ?? 'General';
-            final year = d['year'] ?? 0;
+            final category = d['category'] ?? 'operational';
             if (_activeCategory != 'all' && category != _activeCategory) return false;
-            if (_activeYear != 0 && year != _activeYear) return false;
             return true;
           }).toList();
+
+          final categoryList = [
+            {'key': 'all', 'label': 'All Documents'},
+            ...categories
+                .where((c) => c != 'all')
+                .map((c) => {'key': c, 'label': c[0].toUpperCase() + c.substring(1)})
+          ];
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -547,7 +549,7 @@ class _DocsTabState extends State<_DocsTab> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: categories.map((c) {
+                  children: categoryList.map((c) {
                     final key = c['key'] as String;
                     final selected = _activeCategory == key;
                     return Padding(
@@ -564,63 +566,40 @@ class _DocsTabState extends State<_DocsTab> {
                   }).toList(),
                 ),
               ),
-              const SizedBox(height: 12),
-              if (years.isNotEmpty)
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      ChoiceChip(
-                        label: const Text('All Years'),
-                        selected: _activeYear == 0,
-                        onSelected: (_) => setState(() => _activeYear = 0),
-                        selectedColor: const Color(0xFF2DD4BF),
-                        labelStyle: TextStyle(color: _activeYear == 0 ? const Color(0xFF0A1530) : Colors.white70),
-                        backgroundColor: const Color(0xFF132040),
-                      ),
-                      const SizedBox(width: 8),
-                      ...years.map((y) {
-                        final selected = _activeYear == y;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text('$y'),
-                            selected: selected,
-                            onSelected: (_) => setState(() => _activeYear = y),
-                            selectedColor: const Color(0xFF2DD4BF),
-                            labelStyle: TextStyle(color: selected ? const Color(0xFF0A1530) : Colors.white70),
-                            backgroundColor: const Color(0xFF132040),
-                          ),
-                        );
-                      })
-                    ],
-                  ),
-                ),
               const SizedBox(height: 16),
               ...filtered.map((doc) {
                 final title = doc['title'] ?? 'Untitled';
-                final category = doc['category'] ?? 'General';
-                final url = doc['url'] ?? '';
-                final year = doc['year'] ?? '';
+                final description = doc['description'] ?? '';
+                final category = doc['category'] ?? 'document';
+                final fileUrl = doc['fileUrl'] ?? '';
+                final tags = (doc['tags'] as List<dynamic>?) ?? [];
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: const Color(0xFF132040),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 13)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      if (description.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(description, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      ],
                       const SizedBox(height: 4),
-                      Text('Category: $category ${year != '' ? '• $year' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text('Category: $category', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      if (tags.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text('Tags: ${tags.take(2).toList().join(', ')}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                      ],
                       const SizedBox(height: 12),
                       ElevatedButton(
                         onPressed: () async {
-                          if (url.isEmpty) return;
-                          final uri = Uri.parse(url);
+                          if (fileUrl.isEmpty) return;
+                          final uri = Uri.parse(fileUrl);
                           if (await canLaunchUrl(uri)) {
                             await launchUrl(uri, mode: LaunchMode.externalApplication);
                           }
@@ -949,22 +928,4 @@ class _AdminTab extends StatelessWidget {
     );
   }
 }
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Document Library',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: const Color(0xFF132040),
-      ),
-      body: const Center(
-        child: Text(
-          'Role-filtered documents',
-          style: TextStyle(color: Colors.white54),
-        ),
-      ),
-    );
-  }
-}
+

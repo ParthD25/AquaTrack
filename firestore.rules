@@ -52,8 +52,10 @@ service cloud.firestore {
     }
 
     match /documents/{docId} {
+      // DEPRECATED: This collection is being migrated to documents_library
+      // Keeping read access for backwards compatibility during migration
       allow read: if isStaff();
-      allow create, update, delete: if isAdmin();
+      allow create, update, delete: if false; // No new writes to old collection
     }
 
     match /task_completions/{taskId} {
@@ -75,9 +77,14 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // Document Library & Archives (NEW)
+    // Document Library & Archives
+    // documents_library: main document storage with role-based access
     match /documents_library/{docId} {
-      allow read: if isStaff();
+      // Allow read if user is staff AND (doc is public to all staff OR user's role is in accessRoles)
+      allow read: if isStaff() && (
+        resource.data.accessRoles == ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] ||
+        role() in resource.data.accessRoles
+      );
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }

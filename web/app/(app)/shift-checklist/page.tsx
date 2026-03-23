@@ -84,7 +84,7 @@ export default function ShiftChecklistPage() {
 
       await setDoc(doc(db, 'shift_checklists', shiftId), {
         userId: firebaseUser.uid,
-        staffName: user?.name || firebaseUser.email,
+        staffName: user?.displayName || firebaseUser.email,
         date: today,
         startTime: Timestamp.now(),
         checklist: newChecklist,
@@ -202,7 +202,7 @@ export default function ShiftChecklistPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="page-title">Today's Shift Checklist</h1>
-          <p className="page-subtitle">{user?.name || 'Staff Member'}</p>
+          <p className="page-subtitle">{user?.displayName || 'Staff Member'}</p>
         </div>
         <button
           className="btn btn-ghost"

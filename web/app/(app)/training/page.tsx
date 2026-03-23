@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { DocumentLibraryItem } from '@/lib/types';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { FileIcon, Play, CheckSquare, Eye } from 'lucide-react';
@@ -11,33 +12,41 @@ interface TrainingModule {
   title: string;
   desc: string;
   type: 'video' | 'pdf' | 'checklist' | 'docx' | 'xlsx' | 'doc';
-  url: string;
+  fileUrl?: string;
   status: 'available' | 'filming';
 }
 
 const TYPE_ICON: Record<string, string> = { video: '🎬', pdf: '📄', checklist: '☑', mp4: '🎬', docx: '📝', xlsx: '📊', doc: '📝' };
 const TYPE_COLOR: Record<string, string> = { video: 'var(--purple-400)', mp4: 'var(--purple-400)', pdf: 'var(--red-400)', checklist: 'var(--green-400)', docx: 'var(--aqua-400)', xlsx: 'var(--green-500)', doc: 'var(--aqua-400)' };
 
-const getFileType = (filename: string) => {
-  const parts = filename.split('.');
-  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'doc';
+const mapDocumentTypeToTrainingType = (docType: string): 'video' | 'pdf' | 'checklist' | 'docx' | 'xlsx' | 'doc' => {
+  const typeMap: Record<string, any> = {
+    video: 'video',
+    pdf: 'pdf',
+    docx: 'docx',
+    xlsx: 'xlsx',
+  };
+  return typeMap[docType?.toLowerCase()] || 'doc';
 };
 
 const toDrivePreviewUrl = (url: string) => {
   if (!url) return url;
-  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-  if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
-  const openMatch = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
-  if (openMatch) return `https://drive.google.com/file/d/${openMatch[1]}/preview`;
+  if (url.includes('drive.google.com')) {
+    const fileMatch = url.match(/\/d\/([^/]+)/);
+    if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  }
   return url;
 };
 
 const toViewerUrl = (url: string) => {
   if (!url) return url;
-  if (url.includes('docs.google.com') || url.includes('drive.google.com')) {
+  if (url.includes('drive.google.com')) {
     return toDrivePreviewUrl(url);
   }
-  return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  if (url.endsWith('.pdf') || url.endsWith('.docx') || url.endsWith('.xlsx')) {
+    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  }
+  return url;
 };
 
 export default function TrainingPage() {
@@ -51,31 +60,21 @@ export default function TrainingPage() {
   useEffect(() => {
     const fetchTraining = async () => {
       try {
-        const snap = await getDocs(collection(db, 'documents'));
+        // Fetch from documents_library with category = 'training'
+        const snap = await getDocs(query(collection(db, 'documents_library'), where('category', '==', 'training')));
         const trainingDocs: TrainingModule[] = [];
         
         snap.forEach(d => {
-          const data = d.data();
-          if (data.category === 'pool_tech' || data.category === 'training') {
-            const ftype = getFileType(data.title);
-            let unifiedType: 'video' | 'pdf' | 'checklist' | 'docx' | 'xlsx' | 'doc' = 'doc';
-            
-            if (ftype === 'mp4' || ftype === 'mov') unifiedType = 'video';
-            else if (ftype === 'pdf') unifiedType = 'pdf';
-            else if (ftype === 'docx') unifiedType = 'docx';
-            else if (ftype === 'xlsx') unifiedType = 'xlsx';
-            
-            if (data.title.toLowerCase().includes('checklist')) unifiedType = 'checklist';
-
-            trainingDocs.push({
-              id: d.id,
-              title: data.title,
-              desc: `Category: ${data.category === 'pool_tech' ? 'Pool Technician' : 'General Training'}`,
-              type: unifiedType,
-              url: data.url,
-              status: 'available'
-            });
-          }
+          const data = d.data() as DocumentLibraryItem;
+          
+          trainingDocs.push({
+            id: d.id,
+            title: data.title,
+            desc: data.description || 'Training material',
+            type: mapDocumentTypeToTrainingType(data.type),
+            fileUrl: data.fileUrl,
+            status: 'available'
+          });
         });
 
         // Add 2 placeholder "filming" videos for visual fidelity of the system
@@ -84,7 +83,6 @@ export default function TrainingPage() {
           title: 'Waterslide Operation & Inspection',
           desc: 'Safe operation, pre-open inspection, and post-close procedures.',
           type: 'video',
-          url: '#',
           status: 'filming'
         });
 
@@ -205,14 +203,18 @@ export default function TrainingPage() {
               <button onClick={() => setIsViewerOpen(false)} className="btn btn-ghost btn-sm">Close</button>
             </div>
             <div style={{ flex: 1, background: '#0b1220', borderRadius: 8, overflow: 'hidden', minHeight: 0 }}>
-              {viewModule.type === 'video' || viewModule.url.toLowerCase().endsWith('.mp4') ? (
-                <video src={viewModule.url} controls style={{ width: '100%', height: '100%', background: '#000' }} />
-              ) : (
-                <iframe
-                  src={toViewerUrl(viewModule.url)}
-                  title={viewModule.title}
-                  style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
-                />
+              {viewModule.fileUrl && (
+                <>
+                  {viewModule.type === 'video' || viewModule.fileUrl.toLowerCase().endsWith('.mp4') ? (
+                    <video src={viewModule.fileUrl} controls style={{ width: '100%', height: '100%', background: '#000' }} />
+                  ) : (
+                    <iframe
+                      src={toViewerUrl(viewModule.fileUrl)}
+                      title={viewModule.title}
+                      style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>

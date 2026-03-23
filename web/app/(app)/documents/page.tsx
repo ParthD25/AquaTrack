@@ -2,72 +2,88 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { UserRole } from '@/lib/types';
-import { collection, getDocs } from 'firebase/firestore';
+import { UserRole, DocumentLibraryItem } from '@/lib/types';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { FileIcon, Download, Eye } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 
-type DocCategory = 'all' | 'staff_forms' | 'checklists' | 'senior_lg' | 'pool_tech' | 'training' | 'audits' | 'General' | string;
+type DocCategory = 'all' | 'checklist' | 'incident' | 'hr_form' | 'training' | 'maintenance' | 'operational' | 'archive' | string;
 
 interface DocItem {
   id: string;
   name: string;
-  description: string;
-  folder: string;
+  description?: string;
   category: DocCategory;
-  fileType: string;
-  accessPositions: UserRole[];
-  url: string;
-  year?: number;
+  type: string;
+  fileUrl?: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  tags: string[];
+  accessRoles: UserRole[];
 }
 
 const CATEGORIES: { key: DocCategory; label: string; icon: string }[] = [
   { key: 'all', label: 'All Documents', icon: '📚' },
-  { key: 'staff_forms', label: 'Staff Forms', icon: '📝' },
-  { key: 'checklists', label: 'Checklists', icon: '☑' },
-  { key: 'senior_lg', label: 'Senior LG', icon: '🏅' },
-  { key: 'pool_tech', label: 'Pool Tech', icon: '🔧' },
+  { key: 'checklist', label: 'Checklists', icon: '☑' },
+  { key: 'incident', label: 'Incident Reports', icon: '⚠' },
+  { key: 'hr_form', label: 'HR Forms', icon: '📝' },
   { key: 'training', label: 'Training', icon: '🎓' },
-  { key: 'audits', label: 'Audits', icon: '✓' },
+  { key: 'maintenance', label: 'Maintenance', icon: '🔧' },
+  { key: 'operational', label: 'Operational', icon: '⚙' },
+  { key: 'archive', label: 'Archive', icon: '📦' },
 ];
 
 const CATEGORY_LABELS = new Map(CATEGORIES.map(c => [c.key, `${c.icon} ${c.label}`]));
 
-const getFileType = (filename: string, url: string) => {
-  if (url && url.includes('forms')) return 'gform';
-  if (url && url.includes('presentation')) return 'gslides';
-  if (url && url.includes('folders')) return 'gfolder';
-  if (url && url.includes('document')) return 'gdoc';
-  if (url && (url.includes('docs.google.com') || url.includes('drive.google.com'))) return 'gsheet';
-  const parts = filename.split('.');
-  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'doc';
+const FILE_COLORS: Record<string, string> = { 
+  pdf: '#f87171', docx: '#4285f4', doc: '#4285f4', xlsx: '#22c55e', xls: '#22c55e', 
+  image: '#06b6d4', link: '#94a3b8', video: '#a855f7', 
+  gsheet: '#22c55e', mp4: '#a855f7', mov: '#a855f7', 
+  gform: '#c084fc', gfolder: '#94a3b8', gfile: '#4285f4', gslides: '#f59e0b', gdoc: '#4285f4'
 };
 
-const FILE_COLORS: Record<string, string> = { pdf: '#f87171', docx: '#4285f4', xlsx: '#22c55e', pptx: '#f97316', pd: '#f87171', doc: '#4285f4', gsheet: '#22c55e', mp4: '#a855f7', gform: '#c084fc', gfolder: '#94a3b8', gfile: '#4285f4', gslides: '#f59e0b', gdoc: '#4285f4', link: '#94a3b8' };
+const getFileTypeLabel = (fileType: string): string => {
+  const typeLabels: Record<string, string> = {
+    pdf: 'PDF',
+    docx: 'DOCX',
+    doc: 'DOC',
+    xlsx: 'XLSX',
+    xls: 'XLS',
+    image: 'Image',
+    link: 'Link',
+    video: 'Video',
+  };
+  return typeLabels[fileType?.toLowerCase()] || fileType?.toUpperCase() || 'FILE';
+};
 
 const toDrivePreviewUrl = (url: string) => {
   if (!url) return url;
-  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-  if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
-  const openMatch = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
-  if (openMatch) return `https://drive.google.com/file/d/${openMatch[1]}/preview`;
+  // If it's already a Drive link, convert to preview
+  if (url.includes('drive.google.com')) {
+    const fileMatch = url.match(/\/d\/([^/]+)/);
+    if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  }
   return url;
 };
 
 const toViewerUrl = (url: string) => {
   if (!url) return url;
-  if (url.includes('docs.google.com') || url.includes('drive.google.com')) {
+  // For Drive links, use preview
+  if (url.includes('drive.google.com')) {
     return toDrivePreviewUrl(url);
   }
-  return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  // For other files, use Google Docs viewer
+  if (url.endsWith('.pdf') || url.endsWith('.docx') || url.endsWith('.xlsx')) {
+    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  }
+  return url;
 };
 
 export default function DocumentsPage() {
   const { user, hasRole } = useAuth();
   const searchParams = useSearchParams();
   const [activeCategory, setActiveCategory] = useState<DocCategory>('all');
-  const [activeYear, setActiveYear] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
   const [documents, setDocuments] = useState<DocItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,35 +109,34 @@ export default function DocumentsPage() {
   useEffect(() => {
     const fetchDocs = async () => {
       try {
-        const snap = await getDocs(collection(db, 'documents'));
-        const docsData: DocItem[] = snap.docs.map(d => {
-          const data = d.data();
-          const categoryRaw = data.category || 'General';
-          
-          // Determine access array based on the `accessLevel` string saved in DB
-          const minAccess = data.accessLevel || 'lifeguard';
-          let accessPos: UserRole[] = ['admin', 'sr_guard', 'pool_tech', 'lifeguard'];
-          if (minAccess === 'sr_guard') accessPos = ['admin', 'sr_guard'];
-          else if (minAccess === 'pool_tech') accessPos = ['admin', 'sr_guard', 'pool_tech'];
-          
-          return {
-            id: d.id,
-            name: data.title || d.id,
-            description: categoryRaw,
-            folder: categoryRaw,
-            category: categoryRaw as DocCategory,
-            fileType: getFileType(data.title, data.url),
-            url: data.url || '#',
-            accessPositions: accessPos,
-            year: data.year || 0
-          };
-        });
-        
-        // Sort by year (desc), then name
-        docsData.sort((a, b) => {
-          if ((a.year || 0) !== (b.year || 0)) return (b.year || 0) - (a.year || 0);
-          return a.name.localeCompare(b.name);
-        });
+        // Fetch from new documents_library collection
+        const snap = await getDocs(collection(db, 'documents_library'));
+        const docsData: DocItem[] = snap.docs
+          .map(d => {
+            const data = d.data() as DocumentLibraryItem;
+            
+            return {
+              id: d.id,
+              name: data.title,
+              description: data.description,
+              category: data.category,
+              type: data.type,
+              fileUrl: data.fileUrl,
+              uploadedAt: data.uploadedAt,
+              uploadedBy: data.uploadedBy,
+              tags: data.tags,
+              accessRoles: data.accessRoles as UserRole[],
+            };
+          })
+          // Only show active documents
+          .filter(d => true) // All are active by default from migration
+          // Sort by uploadedAt (newest first), then name
+          .sort((a, b) => {
+            const aTime = new Date(a.uploadedAt).getTime();
+            const bTime = new Date(b.uploadedAt).getTime();
+            if (aTime !== bTime) return bTime - aTime;
+            return a.name.localeCompare(b.name);
+          });
         
         setDocuments(docsData);
       } catch (err) {
@@ -133,18 +148,12 @@ export default function DocumentsPage() {
     fetchDocs();
   }, []);
 
-  const accessible = documents.filter(d => user && d.accessPositions.includes(user.role));
-
-  const availableYears = Array.from(new Set(accessible.map(d => d.year).filter(Boolean)))
-    .map(y => Number(y))
-    .filter(y => !Number.isNaN(y))
-    .sort((a, b) => b - a);
+  const accessible = documents.filter(d => user && d.accessRoles.includes(user.role));
 
   const filtered = accessible.filter(d => {
     const matchCat = activeCategory === 'all' || d.category === activeCategory;
-    const matchYear = activeYear === 'all' || d.year === activeYear;
     const matchSearch = search === '' || d.name.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchYear && matchSearch;
+    return matchCat && matchSearch;
   });
 
   const visibleCategories = CATEGORIES.filter(cat => {
@@ -152,15 +161,10 @@ export default function DocumentsPage() {
     return accessible.some(d => d.category === cat.key);
   });
 
-  const knownCategoryKeys = new Set(CATEGORIES.map(c => c.key));
-  const extraCategoryKeys = Array.from(new Set(accessible.map(d => d.category)))
-    .filter(key => key !== 'all' && !knownCategoryKeys.has(key))
-    .sort((a, b) => a.localeCompare(b));
-
-  const groupedCategories = [
-    ...visibleCategories.filter(c => c.key !== 'all').map(c => c.key),
-    ...extraCategoryKeys,
-  ].filter(key => accessible.some(d => d.category === key));
+  const groupedCategories = visibleCategories
+    .filter(c => c.key !== 'all')
+    .map(c => c.key)
+    .filter(key => accessible.some(d => d.category === key));
 
   if (loading) {
     return <div className="page-container flex justify-center items-center" style={{ minHeight: '50vh' }}>
@@ -190,25 +194,7 @@ export default function DocumentsPage() {
         ))}
       </div>
 
-      {availableYears.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-          <button
-            className={`btn btn-sm ${activeYear === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setActiveYear('all')}
-          >
-            All Years
-          </button>
-          {availableYears.map(year => (
-            <button
-              key={year}
-              className={`btn btn-sm ${activeYear === year ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setActiveYear(year)}
-            >
-              {year}
-            </button>
-          ))}
-        </div>
-      )}
+
 
       <div className="search-wrapper mb-6" style={{ maxWidth: 360 }}>
         <input className="form-input search-input" placeholder="Search documents..." value={search} onChange={e => setSearch(e.target.value)} />
@@ -229,9 +215,9 @@ export default function DocumentsPage() {
                       <div className="flex items-start gap-3">
                         <div style={{
                           width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                          background: `${FILE_COLORS[doc.fileType] || '#888'}15`,
-                          border: `1px solid ${FILE_COLORS[doc.fileType] || '#888'}30`,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: FILE_COLORS[doc.fileType] || '#888'
+                          background: `${FILE_COLORS[doc.type] || '#888'}15`,
+                          border: `1px solid ${FILE_COLORS[doc.type] || '#888'}30`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: FILE_COLORS[doc.type] || '#888'
                         }}>
                           <FileIcon size={24} />
                         </div>
@@ -239,34 +225,30 @@ export default function DocumentsPage() {
                           <div className="text-sm font-semibold" style={{ wordBreak: 'break-word' }}>
                             {doc.name}
                           </div>
-                          <div className="text-xs text-muted mt-1">{doc.folder}</div>
+                          {doc.description && <div className="text-xs text-muted mt-1">{doc.description}</div>}
                           <div className="flex gap-2 mt-2" style={{ flexWrap: 'wrap' }}>
-                            <span className="tag tag-blue" style={{ textTransform: 'uppercase', fontSize: '0.6rem' }}>{doc.fileType}</span>
-                            {doc.year ? (
-                              <span className="tag" style={{ fontSize: '0.6rem' }}>{doc.year}</span>
-                            ) : null}
+                            <span className="tag tag-blue" style={{ textTransform: 'uppercase', fontSize: '0.6rem' }}>{getFileTypeLabel(doc.type)}</span>
+                            {doc.tags && doc.tags.length > 0 && doc.tags.slice(0, 2).map(tag => (
+                              <span key={tag} className="tag" style={{ fontSize: '0.6rem' }}>{tag}</span>
+                            ))}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex gap-2 mt-3" style={{ paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-                        <button 
-                          onClick={() => { setViewDoc(doc); setIsViewerOpen(true); }} 
-                          className="btn btn-secondary btn-sm" style={{ flex: 1 }}
-                        >
-                          <Eye size={14} /> View
-                        </button>
-                        
-                        {doc.fileType === 'gsheet' ? (
-                          <a href={doc.url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ flex: 1, textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
-                            Open Google Sheet
-                          </a>
-                        ) : (
-                          <a href={doc.url} download className="btn btn-secondary btn-sm" style={{ flex: 1, textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+                      {doc.fileUrl && (
+                        <div className="flex gap-2 mt-3" style={{ paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+                          <button 
+                            onClick={() => { setViewDoc(doc); setIsViewerOpen(true); }} 
+                            className="btn btn-secondary btn-sm" style={{ flex: 1 }}
+                          >
+                            <Eye size={14} /> View
+                          </button>
+                          
+                          <a href={doc.fileUrl} download className="btn btn-secondary btn-sm" style={{ flex: 1, textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
                             <Download size={14} /> Download
                           </a>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -281,9 +263,9 @@ export default function DocumentsPage() {
               <div className="flex items-start gap-3">
                 <div style={{
                   width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                  background: `${FILE_COLORS[doc.fileType] || '#888'}15`,
-                  border: `1px solid ${FILE_COLORS[doc.fileType] || '#888'}30`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: FILE_COLORS[doc.fileType] || '#888'
+                  background: `${FILE_COLORS[doc.type] || '#888'}15`,
+                  border: `1px solid ${FILE_COLORS[doc.type] || '#888'}30`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: FILE_COLORS[doc.type] || '#888'
                 }}>
                   <FileIcon size={24} />
                 </div>
@@ -291,34 +273,30 @@ export default function DocumentsPage() {
                   <div className="text-sm font-semibold" style={{ wordBreak: 'break-word' }}>
                     {doc.name}
                   </div>
-                  <div className="text-xs text-muted mt-1">{doc.folder}</div>
+                  {doc.description && <div className="text-xs text-muted mt-1">{doc.description}</div>}
                   <div className="flex gap-2 mt-2" style={{ flexWrap: 'wrap' }}>
-                    <span className="tag tag-blue" style={{ textTransform: 'uppercase', fontSize: '0.6rem' }}>{doc.fileType}</span>
-                    {doc.year ? (
-                      <span className="tag" style={{ fontSize: '0.6rem' }}>{doc.year}</span>
-                    ) : null}
+                    <span className="tag tag-blue" style={{ textTransform: 'uppercase', fontSize: '0.6rem' }}>{getFileTypeLabel(doc.type)}</span>
+                    {doc.tags && doc.tags.length > 0 && doc.tags.slice(0, 2).map(tag => (
+                      <span key={tag} className="tag" style={{ fontSize: '0.6rem' }}>{tag}</span>
+                    ))}
                   </div>
                 </div>
               </div>
 
-              <div className="flex gap-2 mt-3" style={{ paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-                <button 
-                  onClick={() => { setViewDoc(doc); setIsViewerOpen(true); }} 
-                  className="btn btn-secondary btn-sm" style={{ flex: 1 }}
-                >
-                  <Eye size={14} /> View
-                </button>
-                
-                {doc.fileType === 'gsheet' ? (
-                  <a href={doc.url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ flex: 1, textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
-                    Open Google Sheet
-                  </a>
-                ) : (
-                  <a href={doc.url} download className="btn btn-secondary btn-sm" style={{ flex: 1, textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
+              {doc.fileUrl && (
+                <div className="flex gap-2 mt-3" style={{ paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+                  <button 
+                    onClick={() => { setViewDoc(doc); setIsViewerOpen(true); }} 
+                    className="btn btn-secondary btn-sm" style={{ flex: 1 }}
+                  >
+                    <Eye size={14} /> View
+                  </button>
+                  
+                  <a href={doc.fileUrl} download className="btn btn-secondary btn-sm" style={{ flex: 1, textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4 }}>
                     <Download size={14} /> Download
                   </a>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -340,19 +318,30 @@ export default function DocumentsPage() {
             </div>
             
             <div style={{ flex: 1, background: '#f8fafc', borderRadius: 8, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
-              {['pdf', 'gsheet', 'gform', 'gdoc', 'gslides', 'gfolder', 'link', 'docx', 'xlsx', 'pptx', 'doc'].includes(viewDoc.fileType) && (
-                <iframe src={toViewerUrl(viewDoc.url)} style={{ width: '100%', height: '100%', border: 'none' }} title={viewDoc.name} />
+              {['pdf', 'docx', 'xlsx', 'doc'].includes(viewDoc.type) && viewDoc.fileUrl && (
+                <iframe src={toViewerUrl(viewDoc.fileUrl)} style={{ width: '100%', height: '100%', border: 'none' }} title={viewDoc.name} />
               )}
-              {viewDoc.fileType === 'mp4' && (
-                <video src={viewDoc.url} controls style={{ width: '100%', height: '100%', outline: 'none', background: '#000' }} />
+              {viewDoc.type === 'link' && viewDoc.fileUrl && (
+                <iframe src={viewDoc.fileUrl} style={{ width: '100%', height: '100%', border: 'none' }} title={viewDoc.name} />
               )}
-              {!['pdf', 'gsheet', 'gform', 'gdoc', 'gslides', 'gfolder', 'link', 'mp4', 'docx', 'xlsx', 'pptx', 'doc'].includes(viewDoc.fileType) && (
+              {viewDoc.type === 'video' && viewDoc.fileUrl && (
+                <video src={viewDoc.fileUrl} controls style={{ width: '100%', height: '100%', outline: 'none', background: '#000' }} />
+              )}
+              {viewDoc.type === 'image' && viewDoc.fileUrl && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                  <img src={viewDoc.fileUrl} alt={viewDoc.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                </div>
+              )}
+              {!['pdf', 'docx', 'xlsx', 'doc', 'link', 'video', 'image'].includes(viewDoc.type) && (
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center' }}>
                   <FileIcon size={48} color="#888" className="mb-4" />
                   <h3 className="text-lg font-bold text-slate-900 mb-2">Download Required</h3>
-                  <a href={viewDoc.url} download className="btn btn-primary mt-4">
-                    <Download size={16} /> Download File
-                  </a>
+                  <p className="text-sm text-muted mb-4">This file cannot be previewed in the browser</p>
+                  {viewDoc.fileUrl && (
+                    <a href={viewDoc.fileUrl} download className="btn btn-primary mt-4">
+                      <Download size={16} /> Download File
+                    </a>
+                  )}
                 </div>
               )}
             </div>
