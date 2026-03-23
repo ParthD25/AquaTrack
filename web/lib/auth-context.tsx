@@ -70,14 +70,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await setDoc(userDocRef, newUser, { merge: true });
             setUser(newUser);
           }
-        } catch {
-          setUser({
-            uid: fbUser.uid,
-            email: fbUser.email || '',
-            displayName: fbUser.displayName || 'Demo User',
-            role: 'admin',
-            orgId: 'sfac',
-          });
+        } catch (err) {
+          console.error('Failed to load user profile:', err);
+          setUser(null);
         }
       } else {
         setUser(null);

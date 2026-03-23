@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
 import 'home_screen.dart';
 import 'firebase_options.dart';
+import 'reset_password_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,7 +15,7 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
   } catch (e) {
-    print('Firebase initialization error: $e');
+    debugPrint('Firebase initialization error: $e');
   }
   runApp(const AquaTrackApp());
 }
@@ -40,9 +42,14 @@ class AquaTrackApp extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF2DD4BF),
             foregroundColor: const Color(0xFF0A1530),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             padding: const EdgeInsets.symmetric(vertical: 16),
-            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            textStyle: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ),
@@ -61,11 +68,35 @@ class AuthWrapper extends StatelessWidget {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF))),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
+            ),
           );
         }
         if (snapshot.hasData && snapshot.data != null) {
-          return const HomeScreen();
+          final uid = snapshot.data!.uid;
+          return FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance
+                .collection('users')
+                .doc(uid)
+                .get(),
+            builder: (context, userSnap) {
+              if (userSnap.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(
+                    child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
+                  ),
+                );
+              }
+              final data = userSnap.data?.data() as Map<String, dynamic>?;
+              final mustReset =
+                  data != null && data['mustResetPassword'] == true;
+              if (mustReset) {
+                return const ResetPasswordScreen();
+              }
+              return const HomeScreen();
+            },
+          );
         }
         return const LoginScreen();
       },

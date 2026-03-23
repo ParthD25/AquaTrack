@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AUDIT_TYPES, AuditType } from '@/lib/types';
 import { format } from 'date-fns';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, setDoc, query, where } from 'firebase/firestore';
 
 type StaffAuditStatus = {
   staffId: string;
@@ -29,6 +29,13 @@ export default function AuditsPage() {
   const [notes, setNotes] = useState('');
   const [staffData, setStaffData] = useState<StaffAuditStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // History Modal states
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyStaffId, setHistoryStaffId] = useState<string | null>(null);
+  const [historyName, setHistoryName] = useState('');
+  const [auditHistory, setAuditHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     async function fetchAudits() {
@@ -77,7 +84,7 @@ export default function AuditsPage() {
   });
 
   const completedCount = staffData.filter(s => s.audits[activeType].completed).length;
-  const pct = Math.round((completedCount / staffData.length) * 100);
+  const pct = staffData.length ? Math.round((completedCount / staffData.length) * 100) : 0;
 
   const handleMark = (staff: StaffAuditStatus) => {
     setSelectedStaff(staff);
@@ -97,11 +104,85 @@ export default function AuditsPage() {
         : s
     ));
     
+    const completedAt = new Date().toISOString();
+    const recordId = `audit_${Date.now()}`;
+
     await updateDoc(doc(db, 'staff', selectedStaff.staffId), {
       [`audits.${activeType}`]: auditData
     }).catch(console.error);
 
+    await setDoc(doc(db, 'audits', recordId), {
+      id: recordId,
+      staffId: selectedStaff.staffId,
+      staffName: selectedStaff.name,
+      auditType: activeType,
+      completedBy: user?.uid || 'unknown',
+      completedByName: evaluatorName,
+      completedAt,
+      season: CURRENT_SEASON,
+      notes,
+      orgId: user?.orgId || 'sfac',
+    }).catch(console.error);
+
+    const histId = `hist_${Date.now()}`;
+    await setDoc(doc(db, 'history', histId), {
+      id: histId,
+      action: 'add_audit',
+      performedBy: user?.uid || 'unknown',
+      performedByName: evaluatorName,
+      performedAt: completedAt,
+      description: `Marked ${activeMeta.label} for ${selectedStaff.name}`,
+      targetId: recordId,
+      targetName: selectedStaff.name,
+      orgId: user?.orgId || 'sfac',
+    }).catch(console.error);
+
     setShowModal(false);
+  };
+
+  const handleExport = () => {
+    const rows = [
+      ['Name', 'Audit Type', 'Completed', 'Date', 'Evaluator', 'Notes'],
+      ...staffData.map(s => {
+        const a = s.audits[activeType];
+        return [
+          s.name,
+          activeMeta.label,
+          a.completed ? 'Yes' : 'No',
+          a.date || '',
+          a.evaluator || '',
+          (a.notes || '').replace(/\n/g, ' '),
+        ];
+      }),
+    ];
+
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `audits_${activeType}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const openHistory = async (staffId: string, name: string) => {
+    setHistoryStaffId(staffId);
+    setHistoryName(name);
+    setShowHistoryModal(true);
+    setHistoryLoading(true);
+    try {
+      const q = query(collection(db, 'audits'), where('staffId', '==', staffId));
+      const snap = await getDocs(q);
+      const docs = snap.docs
+        .map(d => d.data())
+        .sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+      setAuditHistory(docs);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const auditColors: Record<AuditType, string> = {
@@ -123,10 +204,10 @@ export default function AuditsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button className="btn btn-secondary btn-sm">⬇ Export</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleExport}>⬇ Export</button>
           {hasRole('admin', 'sr_guard') && (
             <button className="btn btn-primary btn-sm" onClick={() => router.push('/audits/new-vat')}>
-              + Conduct Live Test
+              + Interactive Tracker
             </button>
           )}
         </div>
@@ -137,7 +218,7 @@ export default function AuditsPage() {
         {AUDIT_TYPES.map(at => {
           const done = staffData.filter(s => s.audits[at.key].completed).length;
           const total = staffData.length;
-          const pctDone = Math.round((done / total) * 100);
+          const pctDone = total ? Math.round((done / total) * 100) : 0;
           return (
             <button
               key={at.key}
@@ -255,6 +336,15 @@ export default function AuditsPage() {
                   {audit.notes}
                 </div>
               )}
+              <div style={{ paddingLeft: 52, marginTop: 8 }}>
+                <button 
+                  onClick={() => openHistory(staff.staffId, staff.name)}
+                  className="text-xs font-semibold" 
+                  style={{ background: 'none', border: 'none', color: 'var(--aqua-400)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                >
+                  View Performance History →
+                </button>
+              </div>
             </div>
           );
         })}
@@ -303,6 +393,58 @@ export default function AuditsPage() {
             <div className="flex gap-3">
               <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={confirmMark}>Confirm ✓</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {showHistoryModal && (
+        <div className="modal-overlay" onClick={() => setShowHistoryModal(false)}>
+          <div className="modal" style={{ maxWidth: 600, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="section-title">Evaluation Records</h3>
+                <p className="text-sm text-muted">{historyName} · All Seasons</p>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowHistoryModal(false)}>✕</button>
+            </div>
+
+            {historyLoading ? (
+              <div className="flex justify-center p-12"><div className="spinner" /></div>
+            ) : auditHistory.length === 0 ? (
+              <div className="empty-state p-8">
+                <div className="text-2xl mb-2">📄</div>
+                <p>No historic records found for this employee.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '60vh', overflowY: 'auto', paddingRight: 8 }}>
+                {auditHistory.map((h, i) => {
+                  const type = AUDIT_TYPES.find(t => t.key === h.auditType);
+                  return (
+                    <div key={i} style={{ padding: '12px 14px', background: 'var(--bg-elevated)', borderRadius: 10, border: '1px solid var(--border-subtle)' }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span style={{ fontSize: '1.2rem' }}>{type?.icon || '📋'}</span>
+                          <span className="font-bold text-sm">{type?.label || h.auditType}</span>
+                        </div>
+                        <span className="text-xs text-muted">{format(new Date(h.completedAt), 'MMM d, yyyy · h:mm a')}</span>
+                      </div>
+                      <div className="text-xs text-secondary mb-2 whitespace-pre-wrap" style={{ lineHeight: 1.5 }}>
+                        {h.notes || 'No specific notes recorded.'}
+                      </div>
+                      <div className="text-xs text-muted flex items-center justify-between pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <span>Season: {h.season}</span>
+                        <span>Evaluator: <strong>{h.completedByName}</strong></span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            <div className="mt-6 flex justify-end">
+              <button className="btn btn-primary btn-sm" onClick={() => setShowHistoryModal(false)}>Done</button>
             </div>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
 export default function AIChatWidget() {
-  const { user } = useAuth();
+  const { user, firebaseUser } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{role: 'user'|'ai', text: string}[]>([]);
   const [input, setInput] = useState('');
@@ -20,6 +20,10 @@ export default function AIChatWidget() {
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
+    if (!firebaseUser) {
+      setMessages(prev => [...prev, { role: 'ai', text: 'Please sign in again to use AI assistance.' }]);
+      return;
+    }
     
     const userMsg = input.trim();
     setInput('');
@@ -27,17 +31,23 @@ export default function AIChatWidget() {
     setLoading(true);
 
     try {
+      const token = await firebaseUser.getIdToken();
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           prompt: userMsg,
-          userRole: user.role,
-          positionId: user.role, // Assuming role is used as the base position identifier for AI context
         }),
       });
       
       const data = await res.json();
+      if (!res.ok) {
+        setMessages(prev => [...prev, { role: 'ai', text: data.error || 'Error: Could not get a response.' }]);
+        return;
+      }
       if (data.text) {
         setMessages(prev => [...prev, { role: 'ai', text: data.text }]);
       } else {

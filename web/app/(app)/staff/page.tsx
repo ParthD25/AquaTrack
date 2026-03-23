@@ -52,7 +52,7 @@ function getStatusAtMonth(history: StatusEntry[] | undefined, year: number, mont
 }
 
 export default function StaffDirectoryPage() {
-  const { user } = useAuth();
+  const { user, firebaseUser } = useAuth();
   const [search, setSearch] = useState('');
   const [filterPosition, setFilterPosition] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<ViewFilter>('all');
@@ -64,7 +64,15 @@ export default function StaffDirectoryPage() {
     async function fetchStaff() {
       try {
         const snap = await getDocs(collection(db, 'staff'));
-        const staffList = snap.docs.map(d => ({ id: d.id, ...d.data() } as ExtendedStaff));
+        const staffList = snap.docs.map(d => {
+          const data = d.data() as ExtendedStaff;
+          return {
+            id: d.id,
+            ...data,
+            status: data.status || 'active',
+            statusHistory: data.statusHistory || [],
+          } as ExtendedStaff;
+        });
         setStaff(staffList);
       } catch (err) {
         console.error('Fetch error:', err);
@@ -79,6 +87,19 @@ export default function StaffDirectoryPage() {
   const [selectedStaff, setSelectedStaff] = useState<ExtendedStaff | null>(null);
   const [viewScope] = useState<ViewScope>('all');
   const [showHistoryChart, setShowHistoryChart] = useState(false);
+  const [creatingEmployee, setCreatingEmployee] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createResult, setCreateResult] = useState<{ tempPassword: string; resetLink: string; email: string } | null>(null);
+  const [newEmployee, setNewEmployee] = useState({
+    firstName: '',
+    lastName: '',
+    positionId: DEFAULT_POSITIONS[3]?.id || 'lifeguard',
+    phone: '',
+    email: '',
+    address: '',
+    isHighSchool: false,
+    gradYear: new Date().getFullYear() + 2,
+  });
 
   const isAdmin = user?.role === 'admin';
   const isSrGuard = user?.role === 'admin' || user?.role === 'sr_guard';
@@ -161,6 +182,70 @@ export default function StaffDirectoryPage() {
     await updateDoc(doc(db, 'staff', id), { gradYear: gradYear || null, isHighSchool: isHS }).catch(console.error);
   };
 
+  const handleCreateEmployee = async () => {
+    if (!firebaseUser) return;
+    setCreateError('');
+    setCreatingEmployee(true);
+    try {
+      if (!newEmployee.firstName.trim() || !newEmployee.lastName.trim() || !newEmployee.email.trim()) {
+        setCreateError('First name, last name, and email are required.');
+        setCreatingEmployee(false);
+        return;
+      }
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...newEmployee,
+          orgId: user?.orgId || 'sfac',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to create employee');
+      }
+
+      const created: ExtendedStaff = {
+        id: data.uid,
+        firstName: newEmployee.firstName,
+        lastName: newEmployee.lastName,
+        positionId: newEmployee.positionId,
+        phone: newEmployee.phone,
+        email: newEmployee.email,
+        address: newEmployee.address,
+        isHighSchool: newEmployee.isHighSchool,
+        gradYear: newEmployee.isHighSchool ? newEmployee.gradYear : undefined,
+        active: true,
+        visible: true,
+        status: 'active',
+        statusHistory: [],
+        orgId: user?.orgId || 'sfac',
+      };
+
+      setStaff(prev => [...prev, created]);
+      setCreateResult({ tempPassword: data.tempPassword, resetLink: data.resetLink, email: newEmployee.email });
+      setShowAddModal(false);
+      setNewEmployee({
+        firstName: '',
+        lastName: '',
+        positionId: DEFAULT_POSITIONS[3]?.id || 'lifeguard',
+        phone: '',
+        email: '',
+        address: '',
+        isHighSchool: false,
+        gradYear: new Date().getFullYear() + 2,
+      });
+    } catch (err: any) {
+      setCreateError(err.message || 'Failed to create employee');
+    } finally {
+      setCreatingEmployee(false);
+    }
+  };
+
   // Status history for a given time range
   const historyChartData = useMemo(() => {
     const now = new Date();
@@ -186,7 +271,7 @@ export default function StaffDirectoryPage() {
           </p>
         </div>
         {isAdmin && (
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+          <button className="btn btn-primary" onClick={() => { setCreateError(''); setCreateResult(null); setShowAddModal(true); }}>
             + Add Employee
           </button>
         )}
@@ -541,25 +626,134 @@ export default function StaffDirectoryPage() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3 className="section-title mb-2">Add Employee</h3>
             <p className="text-sm text-muted mb-6">After adding, send them a login invite from Admin Settings.</p>
+            {createError && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                fontSize: '0.875rem',
+                color: 'var(--red-400)',
+                marginBottom: 16,
+              }}>
+                <span>⚠️</span> {createError}
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div className="form-group"><label className="form-label">First Name</label><input className="form-input" placeholder="First" /></div>
-                <div className="form-group"><label className="form-label">Last Name</label><input className="form-input" placeholder="Last" /></div>
+                <div className="form-group">
+                  <label className="form-label">First Name</label>
+                  <input
+                    className="form-input"
+                    placeholder="First"
+                    value={newEmployee.firstName}
+                    onChange={e => setNewEmployee(prev => ({ ...prev, firstName: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Last Name</label>
+                  <input
+                    className="form-input"
+                    placeholder="Last"
+                    value={newEmployee.lastName}
+                    onChange={e => setNewEmployee(prev => ({ ...prev, lastName: e.target.value }))}
+                  />
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Position</label>
-                <select className="form-select">{DEFAULT_POSITIONS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                <select
+                  className="form-select"
+                  value={newEmployee.positionId}
+                  onChange={e => setNewEmployee(prev => ({ ...prev, positionId: e.target.value }))}
+                >
+                  {DEFAULT_POSITIONS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
               </div>
-              <div className="form-group"><label className="form-label">Phone</label><input className="form-input" placeholder="555-0000" /></div>
-              <div className="form-group"><label className="form-label">Email</label><input className="form-input" type="email" placeholder="name@email.com" /></div>
+              <div className="form-group">
+                <label className="form-label">Phone</label>
+                <input
+                  className="form-input"
+                  placeholder="555-0000"
+                  value={newEmployee.phone}
+                  onChange={e => setNewEmployee(prev => ({ ...prev, phone: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input
+                  className="form-input"
+                  type="email"
+                  placeholder="name@email.com"
+                  value={newEmployee.email}
+                  onChange={e => setNewEmployee(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Address</label>
+                <input
+                  className="form-input"
+                  placeholder="123 Main St"
+                  value={newEmployee.address}
+                  onChange={e => setNewEmployee(prev => ({ ...prev, address: e.target.value }))}
+                />
+              </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input type="checkbox" style={{ accentColor: 'var(--aqua-500)', width: 16, height: 16 }} />
+                <input
+                  type="checkbox"
+                  checked={newEmployee.isHighSchool}
+                  onChange={e => setNewEmployee(prev => ({ ...prev, isHighSchool: e.target.checked }))}
+                  style={{ accentColor: 'var(--aqua-500)', width: 16, height: 16 }}
+                />
                 <span className="text-sm">High school student</span>
               </label>
+              {newEmployee.isHighSchool && (
+                <div className="form-group">
+                  <label className="form-label">Graduation Year</label>
+                  <select
+                    className="form-select"
+                    value={newEmployee.gradYear}
+                    onChange={e => setNewEmployee(prev => ({ ...prev, gradYear: +e.target.value }))}
+                  >
+                    {[2025, 2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>Class of {y}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-6">
               <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowAddModal(false)}>Cancel</button>
-              <button className="btn btn-primary" style={{ flex: 1 }}>Add Employee</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={handleCreateEmployee} disabled={creatingEmployee}>
+                {creatingEmployee ? 'Creating...' : 'Add Employee'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {createResult && (
+        <div className="modal-overlay" onClick={() => setCreateResult(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3 className="section-title mb-2">Employee Created</h3>
+            <p className="text-sm text-muted mb-4">Share the temporary password or reset link with the new employee.</p>
+            <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+              <div className="text-xs text-muted">Email</div>
+              <div className="font-semibold">{createResult.email}</div>
+            </div>
+            <div className="card" style={{ padding: 16, marginBottom: 12 }}>
+              <div className="text-xs text-muted">Temporary Password</div>
+              <div className="font-semibold">{createResult.tempPassword}</div>
+            </div>
+            <div className="card" style={{ padding: 16 }}>
+              <div className="text-xs text-muted">Password Reset Link</div>
+              <a href={createResult.resetLink} target="_blank" rel="noreferrer" style={{ color: 'var(--aqua-400)' }}>
+                Open reset link
+              </a>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setCreateResult(null)}>Done</button>
             </div>
           </div>
         </div>

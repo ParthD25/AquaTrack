@@ -196,7 +196,7 @@ export default function DocumentsPage() {
       {/* Embedded Document Viewer Modal */}
       {isViewerOpen && viewDoc && (
         <div className="modal-overlay" onClick={() => setIsViewerOpen(false)}>
-          <div className="modal" style={{ width: '90vw', maxWidth: 1200, height: '90vh', display: 'flex', flexDirection: 'column', padding: 24 }} onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ width: '90vw', maxWidth: 1200, height: '85vh', maxHeight: '85vh', display: 'flex', flexDirection: 'column', padding: 24, position: 'relative' }} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">{viewDoc.name}</h2>
               <button onClick={() => setIsViewerOpen(false)} className="btn btn-ghost btn-sm">Close</button>

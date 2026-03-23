@@ -11,6 +11,7 @@ export interface AppUser {
   photoURL?: string;
   orgId: string;
   hasAgreedToTerms?: boolean;
+  mustResetPassword?: boolean;
 }
 
 // A "Position" is the admin-configurable role definition.

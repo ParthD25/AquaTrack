@@ -137,6 +137,19 @@ export default function NewVatPage() {
         orgId: employee.orgId || 'defaultOrg'
       });
 
+      // 3. Update staff member's summary record for tracker
+      const staffDoc = doc(db, 'staff', employee.id);
+      await setDoc(staffDoc, {
+        audits: {
+          [auditType]: {
+            completed: true,
+            date: format(new Date(), 'yyyy-MM-dd'),
+            evaluator: user.displayName || 'Admin',
+            notes: finalNotes
+          }
+        }
+      }, { merge: true });
+
       alert('Audit saved successfully!');
       router.push('/audits');
 
@@ -155,7 +168,7 @@ export default function NewVatPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <button className="btn btn-ghost btn-sm mb-2" onClick={() => router.push('/audits')}>← Back to Audits</button>
-          <h1 className="page-title">Conduct New VAT/Audit</h1>
+          <h1 className="page-title">Interactive Skills Assessment</h1>
           <p className="page-subtitle">Record training tests with timing and drop-zone markers.</p>
         </div>
       </div>

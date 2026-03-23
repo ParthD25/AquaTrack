@@ -28,15 +28,19 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      _userSub = FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots().listen((docSnap) {
-        if (docSnap.exists) {
-          final data = docSnap.data() as Map<String, dynamic>;
-          setState(() {
-            _hasAgreed = data['hasAgreedToTerms'] == true;
-            _isLoadingAgreement = false;
+      _userSub = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots()
+          .listen((docSnap) {
+            if (docSnap.exists) {
+              final data = docSnap.data() as Map<String, dynamic>;
+              setState(() {
+                _hasAgreed = data['hasAgreedToTerms'] == true;
+                _isLoadingAgreement = false;
+              });
+            }
           });
-        }
-      });
     } else {
       setState(() => _isLoadingAgreement = false);
     }
@@ -51,17 +55,21 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _agreeToTerms() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
-        {'hasAgreedToTerms': true}, 
-        SetOptions(merge: true)
-      );
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'hasAgreedToTerms': true,
+      }, SetOptions(merge: true));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoadingAgreement) {
-      return const Scaffold(backgroundColor: Color(0xFF0A1530), body: Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF))));
+      return const Scaffold(
+        backgroundColor: Color(0xFF0A1530),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
+        ),
+      );
     }
 
     if (!_hasAgreed) {
@@ -76,20 +84,36 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF132040),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  border: Border.all(color: Colors.red.withValues(alpha: 77)),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 48),
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.redAccent,
+                      size: 48,
+                    ),
                     const SizedBox(height: 16),
-                    const Text('CONFIDENTIALITY & DUTY TO ACT', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'CONFIDENTIALITY & DUTY TO ACT',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 16),
-                    const Expanded(
+                    const SizedBox(
+                      height: 260,
                       child: SingleChildScrollView(
                         child: SelectableText(
                           'AMERICAN RED CROSS STANDARD OF CARE:\nBy accessing this system, you acknowledge and agree to uphold the American Red Cross standard of care for professional lifeguards. You recognize your legal Duty to Act while on active duty at the Silliman Activity and Family Aquatic Center (City of Newark: https://www.newark.org/departments/recreation-and-community-services/silliman-activity-and-family-aquatic-center).\n\nSTRICT CONFIDENTIALITY:\nThis application, including all medical Incident Reports, Rescue documentation, Employee certifications, and internal facility operations, contains highly confidential information that is legally privileged. If you are not an active, authorized employee, you are legally notified that any unauthorized disclosure, photography, copying, distribution, or use of any information contained within this system is strictly prohibited by law.',
-                          style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.6),
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            height: 1.6,
+                          ),
                           textAlign: TextAlign.justify,
                         ),
                       ),
@@ -104,7 +128,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               side: const BorderSide(color: Colors.white24),
                             ),
-                            child: const Text('Disagree / Exit', style: TextStyle(color: Colors.white70)),
+                            child: const Text(
+                              'Disagree / Exit',
+                              style: TextStyle(color: Colors.white70),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -115,7 +142,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               backgroundColor: Colors.redAccent,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
-                            child: const Text('I Agree', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                            child: const Text(
+                              'I Agree',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -130,15 +163,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // TODO: Open AI Chat Modal
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('AquaTrack AI coming soon to mobile!')),
+            const SnackBar(
+              content: Text('AquaTrack AI coming soon to mobile!'),
+            ),
           );
         },
         backgroundColor: const Color(0xFF2DD4BF),
@@ -146,7 +177,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+          border: Border(
+            top: BorderSide(color: Colors.white.withValues(alpha: 13)),
+          ),
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
@@ -157,10 +190,22 @@ class _HomeScreenState extends State<HomeScreen> {
           type: BottomNavigationBarType.fixed,
           elevation: 0,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.check_circle_outline), label: 'Tasks'),
-            BottomNavigationBarItem(icon: Icon(Icons.verified_user_outlined), label: 'Audits'),
-            BottomNavigationBarItem(icon: Icon(Icons.folder_outlined), label: 'Docs'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_rounded),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.check_circle_outline),
+              label: 'Tasks',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.verified_user_outlined),
+              label: 'Audits',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.folder_outlined),
+              label: 'Docs',
+            ),
           ],
         ),
       ),
@@ -175,12 +220,18 @@ class _DashboardTab extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AquaTrack', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'AquaTrack',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF132040),
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.account_circle_outlined, color: Colors.white),
+            icon: const Icon(
+              Icons.account_circle_outlined,
+              color: Colors.white,
+            ),
             onPressed: () {
               // Quick logout for now
               FirebaseAuth.instance.signOut();
@@ -193,7 +244,11 @@ class _DashboardTab extends StatelessWidget {
         children: [
           Text(
             'Welcome, ${user?.email?.split('@')[0] ?? 'User'}!',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 24),
           // Quick Actions Card
@@ -210,17 +265,40 @@ class _DashboardTab extends StatelessWidget {
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Today\'s Shift', style: TextStyle(color: Color(0xFF0A1530), fontWeight: FontWeight.w600)),
+                Text(
+                  'Today\'s Shift',
+                  style: TextStyle(
+                    color: Color(0xFF0A1530),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 SizedBox(height: 8),
-                Text('Morning (5:30 AM - 9:30 AM)', style: TextStyle(color: Color(0xFF0A1530), fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  'Morning (5:30 AM - 9:30 AM)',
+                  style: TextStyle(
+                    color: Color(0xFF0A1530),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 SizedBox(height: 16),
                 Row(
                   children: [
-                    Icon(Icons.check_circle, color: Color(0xFF0A1530), size: 20),
+                    Icon(
+                      Icons.check_circle,
+                      color: Color(0xFF0A1530),
+                      size: 20,
+                    ),
                     SizedBox(width: 8),
-                    Text('0 of 4 tasks completed', style: TextStyle(color: Color(0xFF0A1530), fontWeight: FontWeight.w500)),
+                    Text(
+                      '0 of 4 tasks completed',
+                      style: TextStyle(
+                        color: Color(0xFF0A1530),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
-                )
+                ),
               ],
             ),
           ),
@@ -235,8 +313,19 @@ class _TasksTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Shift Tasks', style: TextStyle(fontWeight: FontWeight.bold)), backgroundColor: const Color(0xFF132040)),
-      body: const Center(child: Text('Tasks list will mirror web app', style: TextStyle(color: Colors.white54))),
+      appBar: AppBar(
+        title: const Text(
+          'Shift Tasks',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF132040),
+      ),
+      body: const Center(
+        child: Text(
+          'Tasks list will mirror web app',
+          style: TextStyle(color: Colors.white54),
+        ),
+      ),
     );
   }
 }
@@ -246,19 +335,37 @@ class _AuditsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Staff Directory (Live)', style: TextStyle(fontWeight: FontWeight.bold)), backgroundColor: const Color(0xFF132040)),
+      appBar: AppBar(
+        title: const Text(
+          'Staff Directory (Live)',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF132040),
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('staff').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF)));
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
+            );
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+            return Center(
+              child: Text(
+                'Error: ${snapshot.error}',
+                style: const TextStyle(color: Colors.red),
+              ),
+            );
           }
           final staffDocs = snapshot.data?.docs ?? [];
           if (staffDocs.isEmpty) {
-            return const Center(child: Text('No staff found in database', style: TextStyle(color: Colors.white54)));
+            return const Center(
+              child: Text(
+                'No staff found in database',
+                style: TextStyle(color: Colors.white54),
+              ),
+            );
           }
           return ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -273,22 +380,41 @@ class _AuditsTab extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: const Color(0xFF132040),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 13)),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
-                      backgroundColor: const Color(0xFF2DD4BF).withOpacity(0.2),
-                      child: Text(name[0], style: const TextStyle(color: Color(0xFF2DD4BF), fontWeight: FontWeight.bold)),
+                      backgroundColor: const Color(0xFF2DD4BF).withValues(alpha: 51),
+                      child: Text(
+                        name[0],
+                        style: const TextStyle(
+                          color: Color(0xFF2DD4BF),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Colors.white,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          Text('Position: ${data['positionId'] ?? 'Unknown'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                          Text(
+                            'Position: ${data['positionId'] ?? 'Unknown'}',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -310,8 +436,19 @@ class _DocsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Document Library', style: TextStyle(fontWeight: FontWeight.bold)), backgroundColor: const Color(0xFF132040)),
-      body: const Center(child: Text('Role-filtered documents', style: TextStyle(color: Colors.white54))),
+      appBar: AppBar(
+        title: const Text(
+          'Document Library',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF132040),
+      ),
+      body: const Center(
+        child: Text(
+          'Role-filtered documents',
+          style: TextStyle(color: Colors.white54),
+        ),
+      ),
     );
   }
 }

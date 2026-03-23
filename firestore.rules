@@ -1,8 +1,67 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function role() {
+      return userDoc().data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && role() == 'admin';
+    }
+
+    function isSrGuard() {
+      return isSignedIn() && (role() == 'admin' || role() == 'sr_guard');
+    }
+
+    function isStaff() {
+      return isSignedIn() && (role() == 'admin' || role() == 'sr_guard' || role() == 'pool_tech' || role() == 'lifeguard');
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /staff/{staffId} {
+      allow read: if isStaff();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || isSrGuard();
+      allow delete: if isAdmin();
+    }
+
+    match /audits/{auditId} {
+      allow read: if isSrGuard();
+      allow create: if isSrGuard();
+      allow update, delete: if isAdmin();
+    }
+
+    match /history/{historyId} {
+      allow read: if isAdmin();
+      allow create: if isSrGuard();
+      allow update, delete: if isAdmin();
+    }
+
+    match /documents/{docId} {
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /task_completions/{taskId} {
+      allow read, write: if isStaff();
+    }
+
     match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2026, 4, 19);
+      allow read, write: if false;
     }
   }
 }

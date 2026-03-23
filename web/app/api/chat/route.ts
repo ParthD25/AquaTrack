@@ -1,6 +1,9 @@
 import { gemini15Flash, googleAI } from '@genkit-ai/googleai';
 import { genkit } from 'genkit';
 import { NextResponse } from 'next/server';
+import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
+
+export const runtime = 'nodejs';
 
 // Configure a Genkit instance
 const ai = genkit({
@@ -9,8 +12,8 @@ const ai = genkit({
 });
 
 // Define the flow outside the request handler
-const chatFlow = ai.defineFlow('chatFlow', async (input: { prompt: string; userRole: string; positionId: string }) => {
-  const systemPrompt = `You are the AquaTrack AI Assistant. You are currently talking to a staff member with role: ${input.userRole} (Position: ${input.positionId}).
+const chatFlow = ai.defineFlow('chatFlow', async (input: { prompt: string; userRole: string }) => {
+  const systemPrompt = `You are the AquaTrack AI Assistant. You are currently talking to a staff member with role: ${input.userRole}.
   
 ACCESS CONTROL RULES:
 - If role is 'lifeguard': They can only ask about Staff Forms, their own basic shift checklists, and general info. Do NOT provide senior guard or admin info.
@@ -23,25 +26,56 @@ Keep your answers extremely concise, helpful, and professional. You help them co
 
 User's prompt: ${input.prompt}`;
 
-  const { text } = await ai.generate(systemPrompt);
-  return text;
+  if (!process.env.GOOGLE_GENAI_API_KEY) {
+    console.error('MISSING GOOGLE_GENAI_API_KEY');
+    return 'System Error: AI API Key not configured.';
+  }
+
+  try {
+    const { text } = await ai.generate({
+      prompt: systemPrompt,
+      config: { temperature: 0.7 }
+    });
+    return text || 'I understood your request but couldn\'t generate a specific answer. Please try rephrasing.';
+  } catch (err) {
+    console.error('Genkit Generate Error:', err);
+    throw err;
+  }
 });
 
 export async function POST(req: Request) {
   try {
+    const authHeader = req.headers.get('authorization') || '';
+    const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (!tokenMatch) {
+      return NextResponse.json({ error: 'Missing auth token' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { prompt, userRole, positionId } = body;
+    const { prompt } = body;
 
     if (!prompt) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
-    // Call the Genkit flow
-    const responseText = await chatFlow({ prompt, userRole: userRole || 'unknown', positionId: positionId || 'unknown' });
+    const adminAuth = getAdminAuth();
+    const adminDb = getAdminDb();
+    const decoded = await adminAuth.verifyIdToken(tokenMatch[1]);
+    const userDoc = await adminDb.collection('users').doc(decoded.uid).get();
+    const userRole = userDoc.exists ? (userDoc.data()?.role || 'lifeguard') : 'lifeguard';
 
+    console.log(`AI Request from ${userRole}: ${prompt.substring(0, 50)}...`);
+
+    // Call the Genkit flow
+    const responseText = await chatFlow({ prompt, userRole });
+
+    console.log(`AI Response success: ${responseText.substring(0, 50)}...`);
     return NextResponse.json({ text: responseText });
   } catch (error: any) {
-    console.error('AI Chat Error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to process AI request' }, { status: 500 });
+    console.error('AI Route Error:', error);
+    return NextResponse.json({ 
+      text: 'Error: Could not get a response. Please check your connection or contact an administrator.',
+      error: error.message 
+    }, { status: 500 });
   }
 }

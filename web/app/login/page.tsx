@@ -3,12 +3,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { fetchSignInMethodsForEmail, sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetStatus, setResetStatus] = useState('');
   const { signIn, signInWithGoogle } = useAuth();
   const router = useRouter();
 
@@ -36,6 +41,25 @@ export default function LoginPage() {
       setError('Google sign-in failed. Try again or contact your administrator.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setResetStatus('');
+    if (!resetEmail.trim()) {
+      setResetStatus('Please enter your email.');
+      return;
+    }
+    try {
+      const methods = await fetchSignInMethodsForEmail(auth, resetEmail.trim());
+      if (methods.length === 0) {
+        setResetStatus('Account not found. Please contact your administrator.');
+        return;
+      }
+      await sendPasswordResetEmail(auth, resetEmail.trim());
+      setResetStatus('Password reset email sent. Please check your inbox.');
+    } catch {
+      setResetStatus('Unable to send reset email. Try again or contact your administrator.');
     }
   };
 
@@ -137,6 +161,14 @@ export default function LoginPage() {
           <p className="text-sm text-muted mt-6" style={{ textAlign: 'center' }}>
             Need access? Contact your administrator.
           </p>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm mt-3"
+            style={{ width: '100%' }}
+            onClick={() => { setResetEmail(email); setResetStatus(''); setShowReset(true); }}
+          >
+            Forgot password?
+          </button>
         </div>
 
         {/* Global Confidentiality Disclaimer */}
@@ -147,6 +179,34 @@ export default function LoginPage() {
         </div>
 
       </div>
+
+      {showReset && (
+        <div className="modal-overlay" onClick={() => setShowReset(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3 className="section-title mb-2">Reset Password</h3>
+            <p className="text-sm text-muted mb-4">Enter your email to receive a reset link.</p>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input
+                className="form-input"
+                type="email"
+                value={resetEmail}
+                onChange={e => setResetEmail(e.target.value)}
+                placeholder="name@email.com"
+              />
+            </div>
+            {resetStatus && (
+              <div className="text-sm text-muted mt-3">
+                {resetStatus}
+              </div>
+            )}
+            <div className="flex gap-3 mt-6">
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowReset(false)}>Close</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={handlePasswordReset}>Send Link</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .login-page {

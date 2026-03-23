@@ -48,6 +48,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-layout">
+      {user.mustResetPassword && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div className="modal" style={{ maxWidth: 520 }}>
+            <h2 className="text-xl font-bold text-center mb-3">Password Reset Required</h2>
+            <p className="text-sm text-secondary" style={{ lineHeight: 1.6, textAlign: 'center' }}>
+              For security, you must set a new password before continuing.
+            </p>
+            <div className="flex gap-4 mt-6">
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={signOut}>Sign Out</button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => router.push('/reset-password')}>
+                Reset Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {user.hasAgreedToTerms !== true && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
           <div className="modal" style={{ maxWidth: 640 }}>
