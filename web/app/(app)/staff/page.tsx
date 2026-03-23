@@ -427,6 +427,18 @@ export default function StaffDirectoryPage() {
                             <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', fontSize: '0.65rem', padding: '2px 7px' }}>🎓 {s.gradYear}</span>
                           )}
                         </div>
+                        {isAdmin && (
+                          <div style={{ marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                            <select
+                              className="form-select"
+                              style={{ padding: '2px 28px 2px 8px', fontSize: '0.7rem', width: 'auto' }}
+                              value={s.positionId}
+                              onChange={e => changePosition(s.id, e.target.value)}
+                            >
+                              {DEFAULT_POSITIONS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                          </div>
+                        )}
                         {s.phone && <div className="text-xs text-muted mt-2">📱 {s.phone}</div>}
                         {canSeeEmail && s.email && <div className="text-xs text-muted mt-1">✉ {s.email}</div>}
                         {canSeeAddress && s.address && <div className="text-xs text-muted mt-1">📍 {s.address}</div>}

@@ -44,16 +44,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setLoading(true);
       setFirebaseUser(fbUser);
       if (fbUser) {
         try {
           const userDocRef = doc(db, 'users', fbUser.uid);
           const userDoc = await getDoc(userDocRef);
           if (userDoc.exists() && userDoc.data().role) {
-            setUser({ 
-              uid: fbUser.uid, 
+            setUser({
+              uid: fbUser.uid,
               displayName: userDoc.data().displayName || fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-              ...userDoc.data() 
+              ...userDoc.data(),
             } as AppUser);
           } else {
             // Create a basic profile for new users (default to lifeguard), merging with any stubs
@@ -63,9 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: fbUser.email || '',
               displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
               role: 'lifeguard',
-              photoURL: fbUser.photoURL || undefined,
+              photoURL: fbUser.photoURL ?? null,
               orgId: 'sfac',
-              ...existingData
+              ...existingData,
             };
             await setDoc(userDocRef, newUser, { merge: true });
             setUser(newUser);
@@ -83,11 +84,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    setLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      setLoading(false);
+      throw err;
+    }
   };
 
   const signInWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider);
+    setLoading(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      setLoading(false);
+      throw err;
+    }
   };
 
   const signOut = async () => {

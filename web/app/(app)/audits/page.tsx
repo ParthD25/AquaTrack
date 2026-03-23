@@ -174,12 +174,31 @@ export default function AuditsPage() {
     try {
       const q = query(collection(db, 'audits'), where('staffId', '==', staffId));
       const snap = await getDocs(q);
-      const docs = snap.docs
-        .map(d => d.data())
-        .sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
-      setAuditHistory(docs);
+      const docs = snap.docs.map(d => d.data());
+
+      if (docs.length === 0) {
+        const staff = staffData.find(s => s.staffId === staffId);
+        if (staff) {
+          const fallback = Object.entries(staff.audits)
+            .filter(([, data]) => data.completed)
+            .map(([auditType, data]) => ({
+              auditType,
+              notes: data.notes || '',
+              season: CURRENT_SEASON,
+              completedByName: data.evaluator || 'Unknown',
+              completedAt: data.date ? `${data.date}T12:00:00Z` : new Date().toISOString(),
+            }));
+          setAuditHistory(fallback);
+        } else {
+          setAuditHistory([]);
+        }
+      } else {
+        const sorted = docs.sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
+        setAuditHistory(sorted);
+      }
     } catch (e) {
       console.error(e);
+      setAuditHistory([]);
     } finally {
       setHistoryLoading(false);
     }

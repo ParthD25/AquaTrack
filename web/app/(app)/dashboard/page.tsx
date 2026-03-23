@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 const DEMO_TASKS = [
   { id: '1', title: 'Chemical Check - Main Pool', category: 'chemical', done: false, priority: 'high' },
@@ -60,11 +61,13 @@ function getNextShift() {
 
 export default function DashboardPage() {
   const { user, hasRole } = useAuth();
+  const router = useRouter();
   const [tasks, setTasks] = useState(DEMO_TASKS);
   const [completions, setCompletions] = useState<Record<string, any>>({});
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [totalStaff, setTotalStaff] = useState(38);
   const [auditsNeeded, setAuditsNeeded] = useState<{name: string, missing: string[]}[]>(DEMO_AUDITS_NEEDED);
+  const [showAuditsNeeded, setShowAuditsNeeded] = useState(false);
 
   useEffect(() => {
     // 1. Fetch Staff Stats
@@ -179,14 +182,14 @@ export default function DashboardPage() {
 
       {/* Stats Row */}
       <div className="grid-4 grid mb-6">
-        <div className="stat-card">
+        <button className="stat-card" onClick={() => document.getElementById('shift-checklist')?.scrollIntoView({ behavior: 'smooth' })} style={{ textAlign: 'left', cursor: 'pointer' }}>
           <div className="stat-icon" style={{ background: 'rgba(0,212,255,0.1)' }}>
             <span style={{ fontSize: '1.25rem' }}>☑</span>
           </div>
           <div className="stat-value gradient-text">{completedTasks}/{totalTasks}</div>
           <div className="stat-label">Tasks Today</div>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button className="stat-card" onClick={() => router.push('/audits')} style={{ textAlign: 'left', cursor: 'pointer' }}>
           <div className="stat-icon" style={{ background: 'rgba(74,222,128,0.1)' }}>
             <span style={{ fontSize: '1.25rem' }}>✓</span>
           </div>
@@ -194,28 +197,28 @@ export default function DashboardPage() {
             {AUDIT_TYPES.length}
           </div>
           <div className="stat-label">Audit Types Active</div>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button className="stat-card" onClick={() => setShowAuditsNeeded(true)} style={{ textAlign: 'left', cursor: 'pointer' }}>
           <div className="stat-icon" style={{ background: 'rgba(251,191,36,0.1)' }}>
             <span style={{ fontSize: '1.25rem' }}>⚠</span>
           </div>
           <div className="stat-value" style={{ color: 'var(--amber-400)' }}>{auditsNeeded.length}</div>
           <div className="stat-label">Staff Need Audits</div>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button className="stat-card" onClick={() => router.push('/staff')} style={{ textAlign: 'left', cursor: 'pointer' }}>
           <div className="stat-icon" style={{ background: 'rgba(168,85,247,0.1)' }}>
             <span style={{ fontSize: '1.25rem' }}>👥</span>
           </div>
           <div className="stat-value" style={{ color: 'var(--purple-400)' }}>{totalStaff}</div>
           <div className="stat-label">Total Staff</div>
-        </div>
+        </button>
       </div>
 
       {/* Main 2-col layout */}
       <div className="dash-two-col">
         {/* Task List */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4" id="shift-checklist">
             <h2 className="section-title">⚡ Shift Checklist</h2>
             <div className="flex gap-2">
               <div className="progress-bar" style={{ width: 100, alignSelf: 'center' }}>
@@ -377,6 +380,33 @@ export default function DashboardPage() {
           .shift-badge { display: none; }
         }
       `}</style>
+
+      {showAuditsNeeded && (
+        <div className="modal-overlay" onClick={() => setShowAuditsNeeded(false)}>
+          <div className="modal" style={{ maxWidth: 700, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="section-title">Staff Missing Audits</h3>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowAuditsNeeded(false)}>Close</button>
+            </div>
+            {auditsNeeded.length === 0 ? (
+              <div className="empty-state">
+                <div className="text-muted">All staff are current on audits.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '60vh', overflowY: 'auto' }}>
+                {auditsNeeded.map((item) => (
+                  <div key={item.name} className="card" style={{ padding: 14 }}>
+                    <div className="text-sm font-semibold">{item.name}</div>
+                    <div className="text-xs text-muted mt-1">
+                      Missing: {item.missing.join(', ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

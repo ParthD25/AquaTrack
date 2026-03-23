@@ -186,8 +186,8 @@ export default function AIChatWidget() {
                 padding: '10px 14px',
                 borderRadius: '20px',
                 border: '1px solid var(--border-subtle)',
-                backgroundColor: 'rgba(255,255,255,0.03)',
-                color: 'white',
+                backgroundColor: 'var(--bg-input)',
+                color: 'var(--text-primary)',
                 outline: 'none',
               }}
             />

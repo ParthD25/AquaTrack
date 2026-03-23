@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import {
   DEFAULT_POSITIONS, DEFAULT_SHIFTS, Position,
   PERMISSION_GROUPS, PERMISSION_LABELS, PositionPermissions, ShiftDefinition
 } from '@/lib/types';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { StaffMember } from '@/lib/types';
 
-type AdminTab = 'positions' | 'documents' | 'users' | 'shifts' | 'history';
+type AdminTab = 'positions' | 'documents' | 'access' | 'users' | 'shifts' | 'history';
 
 // Demo docs — same set as documents page
 const DEMO_DOCS = [
@@ -79,13 +82,17 @@ function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean
 }
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, firebaseUser } = useAuth();
   const [activeTab, setActiveTab] = useState<AdminTab>('positions');
   const [positions, setPositions] = useState<Position[]>(DEFAULT_POSITIONS);
   const [selectedPositionId, setSelectedPositionId] = useState<string>('sr_guard');
   const [docs, setDocs] = useState(DEMO_DOCS);
   const [shifts, setShifts] = useState<ShiftDefinition[]>(DEFAULT_SHIFTS);
   const [users, setUsers] = useState(MOCK_USERS);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [actionStatus, setActionStatus] = useState('');
+  const [accessStaff, setAccessStaff] = useState<StaffMember[]>([]);
+  const [accessLoading, setAccessLoading] = useState(true);
   const [showNewPositionModal, setShowNewPositionModal] = useState(false);
   const [newPosName, setNewPosName] = useState('');
   const [newPosColor, setNewPosColor] = useState('#00d4ff');
@@ -149,10 +156,69 @@ export default function AdminPage() {
   const TABS: { key: AdminTab; label: string; icon: string }[] = [
     { key: 'positions', label: 'Positions & Permissions', icon: '🏷' },
     { key: 'documents', label: 'Document Access', icon: '🔐' },
+    { key: 'access', label: 'Access Control', icon: '🛂' },
     { key: 'users', label: 'Users & Accounts', icon: '👤' },
     { key: 'shifts', label: 'Shift Schedule', icon: '🕐' },
     { key: 'history', label: 'Change History', icon: '📜' },
   ];
+
+  useEffect(() => {
+    const fetchAccessStaff = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'staff'));
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember));
+        setAccessStaff(list);
+      } catch (err) {
+        console.error('Failed to load staff access', err);
+      } finally {
+        setAccessLoading(false);
+      }
+    };
+    fetchAccessStaff();
+  }, []);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'users'));
+        const list = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            uid: d.id,
+            name: data.displayName || data.email || d.id,
+            email: data.email || '',
+            positionId: data.positionId || data.role || 'lifeguard',
+            active: data.disabled ? false : true,
+            lastLogin: data.lastLogin || '—',
+          };
+        });
+        setUsers(list);
+      } catch (err) {
+        console.error('Failed to load users', err);
+      } finally {
+        setUsersLoading(false);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  const callAdminAction = async (path: string, payload: Record<string, any>) => {
+    if (!firebaseUser) return { ok: false, error: 'Missing auth' };
+    const token = await firebaseUser.getIdToken();
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { ok: false, error: data?.error || 'Request failed' };
+    }
+    return { ok: true, data };
+  };
 
   return (
     <div className="page-container animate-fade-in">
@@ -344,6 +410,91 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ━━━ ACCESS CONTROL ━━━ */}
+      {activeTab === 'access' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="section-title">Access Control</h2>
+              <p className="text-sm text-muted mt-1">Manage roles and visibility for each employee.</p>
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Visibility</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accessLoading && (
+                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>Loading staff...</td></tr>
+                  )}
+                  {!accessLoading && accessStaff.map(s => (
+                    <tr key={s.id}>
+                      <td>
+                        <div className="text-sm font-semibold">{s.firstName} {s.lastName}</div>
+                        <div className="text-xs text-muted">{s.email || 'No email on file'}</div>
+                      </td>
+                      <td>
+                        <select
+                          className="form-select"
+                          style={{ padding: '4px 30px 4px 10px', width: 'auto', fontSize: '0.8rem' }}
+                          value={s.positionId}
+                          onChange={async e => {
+                            const positionId = e.target.value;
+                            setAccessStaff(prev => prev.map(mem => mem.id === s.id ? { ...mem, positionId } : mem));
+                            await updateDoc(doc(db, 'staff', s.id), { positionId }).catch(console.error);
+                          }}
+                        >
+                          {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          className="form-select"
+                          style={{ padding: '4px 30px 4px 10px', width: 'auto', fontSize: '0.8rem' }}
+                          value={s.status || 'active'}
+                          onChange={async e => {
+                            const status = e.target.value;
+                            setAccessStaff(prev => prev.map(mem => mem.id === s.id ? { ...mem, status } : mem));
+                            await updateDoc(doc(db, 'staff', s.id), { status }).catch(console.error);
+                          }}
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                          <option value="former">Former</option>
+                        </select>
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={async () => {
+                            const visible = s.visible === false ? true : false;
+                            setAccessStaff(prev => prev.map(mem => mem.id === s.id ? { ...mem, visible } : mem));
+                            await updateDoc(doc(db, 'staff', s.id), { visible }).catch(console.error);
+                          }}
+                        >
+                          {s.visible === false ? 'Show' : 'Hide'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!accessLoading && accessStaff.length === 0 && (
+                    <tr><td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>No staff records found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ━━━ USERS & ACCOUNTS ━━━ */}
       {activeTab === 'users' && (
         <div>
@@ -367,7 +518,10 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => {
+                {usersLoading && (
+                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>Loading users...</td></tr>
+                )}
+                {!usersLoading && users.map(u => {
                   const pos = positions.find(p => p.id === u.positionId) || DEFAULT_POSITIONS[3];
                   return (
                     <tr key={u.uid}>
@@ -385,7 +539,12 @@ export default function AdminPage() {
                           className="form-select"
                           style={{ padding: '4px 30px 4px 10px', width: 'auto', fontSize: '0.8rem', color: pos.color }}
                           value={u.positionId}
-                          onChange={e => setUsers(prev => prev.map(usr => usr.uid === u.uid ? { ...usr, positionId: e.target.value } : usr))}
+                          onChange={async e => {
+                            const positionId = e.target.value;
+                            setUsers(prev => prev.map(usr => usr.uid === u.uid ? { ...usr, positionId } : usr));
+                            await updateDoc(doc(db, 'users', u.uid), { positionId, role: positionId }).catch(console.error);
+                            await updateDoc(doc(db, 'staff', u.uid), { positionId }).catch(console.error);
+                          }}
                         >
                           {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
@@ -398,16 +557,54 @@ export default function AdminPage() {
                       </td>
                       <td>
                         <div className="flex gap-2">
-                          <button className="btn btn-ghost btn-sm" title="Reset password" style={{ fontSize: '0.8rem' }}>🔑 Reset PW</button>
-                          <button className="btn btn-danger btn-sm" title="Revoke access" style={{ fontSize: '0.8rem' }}>✕</button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            title="Reset password"
+                            style={{ fontSize: '0.8rem' }}
+                            onClick={async () => {
+                              setActionStatus('');
+                              const result = await callAdminAction('/api/admin/reset-password', { uid: u.uid, email: u.email });
+                              if (!result.ok) {
+                                setActionStatus(result.error || 'Reset failed');
+                                return;
+                              }
+                              setActionStatus('Password reset link generated.');
+                            }}
+                          >
+                            🔑 Reset PW
+                          </button>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            title="Revoke access"
+                            style={{ fontSize: '0.8rem' }}
+                            onClick={async () => {
+                              setActionStatus('');
+                              const result = await callAdminAction('/api/admin/revoke-user', { uid: u.uid });
+                              if (!result.ok) {
+                                setActionStatus(result.error || 'Revoke failed');
+                                return;
+                              }
+                              setUsers(prev => prev.map(usr => usr.uid === u.uid ? { ...usr, active: false } : usr));
+                              setActionStatus('Access revoked.');
+                            }}
+                          >
+                            ✕
+                          </button>
                         </div>
                       </td>
                     </tr>
                   );
                 })}
+                {!usersLoading && users.length === 0 && (
+                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>No user accounts found.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
+
+          {actionStatus && (
+            <div className="text-sm text-muted" style={{ marginTop: 10 }}>{actionStatus}</div>
+          )}
 
           {/* Invite modal */}
           {showInviteModal && (

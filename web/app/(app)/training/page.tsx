@@ -23,11 +23,30 @@ const getFileType = (filename: string) => {
   return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'doc';
 };
 
+const toDrivePreviewUrl = (url: string) => {
+  if (!url) return url;
+  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (fileMatch) return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  const openMatch = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+  if (openMatch) return `https://drive.google.com/file/d/${openMatch[1]}/preview`;
+  return url;
+};
+
+const toViewerUrl = (url: string) => {
+  if (!url) return url;
+  if (url.includes('docs.google.com') || url.includes('drive.google.com')) {
+    return toDrivePreviewUrl(url);
+  }
+  return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+};
+
 export default function TrainingPage() {
   const { hasRole } = useAuth();
   const [activeFilter, setActiveFilter] = useState<'all' | 'video' | 'pdf' | 'checklist'>('all');
   const [modules, setModules] = useState<TrainingModule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [viewModule, setViewModule] = useState<TrainingModule | null>(null);
 
   useEffect(() => {
     const fetchTraining = async () => {
@@ -163,7 +182,11 @@ export default function TrainingPage() {
             <p className="text-xs text-secondary mb-4" style={{ lineHeight: 1.6, flex: 1 }}>{mod.desc}</p>
 
             <button
-              onClick={() => { if(mod.status !== 'filming') window.open(mod.url, '_blank'); }}
+              onClick={() => {
+                if (mod.status === 'filming') return;
+                setViewModule(mod);
+                setIsViewerOpen(true);
+              }}
               className={`btn btn-sm ${mod.status === 'filming' ? 'btn-secondary' : 'btn-primary'}`}
               style={{ width: '100%' }}
               disabled={mod.status === 'filming'}
@@ -173,6 +196,28 @@ export default function TrainingPage() {
           </div>
         ))}
       </div>
+
+      {isViewerOpen && viewModule && (
+        <div className="modal-overlay" onClick={() => setIsViewerOpen(false)}>
+          <div className="modal" style={{ width: '90vw', maxWidth: 1100, height: '80vh', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: 24 }} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold">{viewModule.title}</h2>
+              <button onClick={() => setIsViewerOpen(false)} className="btn btn-ghost btn-sm">Close</button>
+            </div>
+            <div style={{ flex: 1, background: '#0b1220', borderRadius: 8, overflow: 'hidden', minHeight: 0 }}>
+              {viewModule.type === 'video' || viewModule.url.toLowerCase().endsWith('.mp4') ? (
+                <video src={viewModule.url} controls style={{ width: '100%', height: '100%', background: '#000' }} />
+              ) : (
+                <iframe
+                  src={toViewerUrl(viewModule.url)}
+                  title={viewModule.title}
+                  style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .training-card { transition: all 200ms; height: 100%; }
