@@ -15,6 +15,7 @@ const NAV_SECTIONS = [
       { href: '/certs', icon: '📋', label: 'Certs & Retention', roles: ['admin', 'sr_guard'] },
       { href: '/inventory', icon: '📦', label: 'Inventory', roles: ['admin', 'sr_guard', 'pool_tech'] },
       { href: '/staff', icon: '👥', label: 'Staff Directory', roles: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
+      { href: '/shift-checklist', icon: '✅', label: 'Today\'s Checklist', roles: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
     ],
   },
   {
@@ -35,6 +36,11 @@ const NAV_SECTIONS = [
     label: 'Admin',
     items: [
       { href: '/admin', icon: '⚙', label: 'Admin Settings', roles: ['admin'] },
+      { href: '/admin/shift-tasks', icon: '✏️', label: 'Manage Shift Tasks', roles: ['admin'] },
+      { href: '/admin/shift-reports', icon: '📊', label: 'Shift Reports', roles: ['admin'] },
+      { href: '/admin/staff-forms', icon: '📋', label: 'Staff Forms', roles: ['admin'] },
+      { href: '/admin/documents-library', icon: '📚', label: 'Document Library', roles: ['admin'] },
+      { href: '/admin/document-archives', icon: '📦', label: 'Archives', roles: ['admin'] },
     ],
   },
 ];
@@ -131,7 +137,19 @@ export default function Sidebar() {
         <div style={{ marginBottom: 16 }}>
           <ThemeToggle />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <Link
+          href="/profile"
+          className={`nav-item ${pathname === '/profile' ? 'active' : ''}`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            marginBottom: 12,
+            padding: '8px 12px',
+            borderRadius: 8,
+            transition: 'all 0.2s',
+          }}
+        >
           <div className="avatar avatar-sm">{initials}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -141,7 +159,7 @@ export default function Sidebar() {
               {ROLE_LABELS[user.role]}
             </div>
           </div>
-        </div>
+        </Link>
         <button className="btn btn-ghost btn-sm" style={{ width: '100%' }} onClick={handleSignOut}>
           Sign Out
         </button>

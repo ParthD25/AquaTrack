@@ -65,9 +65,7 @@ export default function AuditsPage() {
     return (
       <div className="page-container">
         <div className="empty-state">
-          <div className="empty-state-icon">🔒</div>
           <p className="font-semibold">Access Restricted</p>
-          <p className="text-sm text-muted">Audit Tracker is available to Senior Guards and Admins only.</p>
         </div>
       </div>
     );

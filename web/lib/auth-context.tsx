@@ -37,6 +37,23 @@ const AuthContext = createContext<AuthContextType>({
 
 const googleProvider = new GoogleAuthProvider();
 
+const ROLE_ALIASES: Record<string, UserRole> = {
+  admin: 'admin',
+  administrator: 'admin',
+  'sr_guard': 'sr_guard',
+  'senior guard': 'sr_guard',
+  'senior_guard': 'sr_guard',
+  'pool_tech': 'pool_tech',
+  'pool tech': 'pool_tech',
+  lifeguard: 'lifeguard',
+};
+
+const normalizeRole = (rawRole?: string): UserRole | null => {
+  if (!rawRole) return null;
+  const key = rawRole.toLowerCase().replace(/\s+/g, ' ').trim();
+  return ROLE_ALIASES[key] || null;
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
@@ -49,28 +66,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (fbUser) {
         try {
           const userDocRef = doc(db, 'users', fbUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists() && userDoc.data().role) {
-            setUser({
-              uid: fbUser.uid,
-              displayName: userDoc.data().displayName || fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-              ...userDoc.data(),
-            } as AppUser);
-          } else {
-            // Create a basic profile for new users (default to lifeguard), merging with any stubs
-            const existingData = userDoc.exists() ? userDoc.data() : {};
-            const newUser: AppUser = {
-              uid: fbUser.uid,
-              email: fbUser.email || '',
-              displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
-              role: 'lifeguard',
-              photoURL: fbUser.photoURL ?? null,
-              orgId: 'sfac',
-              ...existingData,
-            };
-            await setDoc(userDocRef, newUser, { merge: true });
-            setUser(newUser);
+          const staffDocRef = doc(db, 'staff', fbUser.uid);
+          const [userDoc, staffDoc] = await Promise.all([getDoc(userDocRef), getDoc(staffDocRef)]);
+          const userData = userDoc.exists() ? userDoc.data() : {};
+          const staffData = staffDoc.exists() ? staffDoc.data() : {};
+
+          const rawRole = userData.role || userData.positionId || staffData.role || staffData.positionId;
+          const normalizedRole = normalizeRole(rawRole) || 'lifeguard';
+
+          const staffName = staffData.firstName && staffData.lastName
+            ? `${staffData.firstName} ${staffData.lastName}`
+            : '';
+          const resolvedName = userData.displayName || staffName || fbUser.displayName || fbUser.email?.split('@')[0] || 'User';
+
+          const resolvedUser: AppUser = {
+            uid: fbUser.uid,
+            email: fbUser.email || userData.email || '',
+            displayName: resolvedName,
+            role: normalizedRole,
+            photoURL: fbUser.photoURL ?? userData.photoURL ?? null,
+            orgId: userData.orgId || staffData.orgId || 'sfac',
+            ...userData,
+          } as AppUser;
+
+          const shouldSyncRole = !userDoc.exists() || !normalizeRole(userData.role || userData.positionId) || normalizeRole(userData.role || userData.positionId) !== normalizedRole;
+          if (shouldSyncRole) {
+            await setDoc(userDocRef, {
+              role: normalizedRole,
+              positionId: normalizedRole,
+              displayName: resolvedName,
+              email: fbUser.email || userData.email || '',
+              orgId: userData.orgId || staffData.orgId || 'sfac',
+            }, { merge: true });
           }
+
+          setUser(resolvedUser);
         } catch (err) {
           console.error('Failed to load user profile:', err);
           setUser(null);

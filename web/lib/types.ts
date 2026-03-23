@@ -348,3 +348,144 @@ export function getNavForPermissions(perms: PositionPermissions) {
   ];
   return items.filter(i => i.show);
 }
+
+// Staff Forms System
+export type FormFieldType = 'text' | 'textarea' | 'checkbox' | 'number' | 'percentage' | 'dropdown' | 'email' | 'phone' | 'date';
+
+export interface FormField {
+  id: string;
+  label: string;
+  type: FormFieldType;
+  required: boolean;
+  placeholder?: string;
+  options?: string[]; // for dropdown/checkbox groups
+}
+
+export interface StaffForm {
+  id: string;
+  title: string;
+  description?: string;
+  category: 'general' | 'incident' | 'checklist' | 'training' | 'feedback' | 'custom';
+  fields: FormField[];
+  createdAt: string;
+  createdBy: string;
+  active: boolean;
+}
+
+// Document Library System (NEW)
+export type DocumentCategory = 'checklist' | 'incident' | 'hr_form' | 'training' | 'maintenance' | 'operational' | 'archive';
+export type DocumentType = 'pdf' | 'docx' | 'xlsx' | 'image' | 'link' | 'video';
+
+export interface DocumentLibraryItem {
+  id: string;
+  title: string;
+  description?: string;
+  category: DocumentCategory;
+  type: DocumentType;
+  fileUrl?: string;
+  fileSize?: number;
+  uploadedAt: string;
+  uploadedBy: string;
+  tags: string[];
+  accessRoles: UserRole[];
+  version: number;
+  isActive: boolean;
+  linkedForms?: string[];
+  metadata?: Record<string, any>;
+}
+
+export interface DocumentTemplate {
+  id: string;
+  name: string;
+  category: DocumentCategory;
+  description?: string;
+  fileUrl: string;
+  fileType: DocumentType;
+  createdAt: string;
+  createdBy: string;
+  usageCount: number;
+  lastUsedAt?: string;
+  tags: string[];
+}
+
+export interface DocumentArchive {
+  id: string;
+  archiveName: string;
+  sourceFolder: string;
+  importDate: string;
+  importedBy: string;
+  totalFiles: number;
+  documents: string[]; // document IDs
+  status: 'pending' | 'importing' | 'complete' | 'failed';
+  notes?: string;
+  errorLog?: string;
+}
+
+export interface StaffFormSubmission {
+  id: string;
+  formId: string;
+  staffId: string;
+  staffName: string;
+  submissionDate: string;
+  data: Record<string, any>;
+  status: 'draft' | 'submitted' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvalDate?: string;
+  notes?: string;
+  rejectionReason?: string;
+}
+
+export interface ChecklistLibraryItem {
+  id: string;
+  title: string;
+  category: DocumentCategory;
+  items: ChecklistItem[];
+  createdAt: string;
+  updatedAt: string;
+  versions: ChecklistVersion[];
+  usedIn: string[]; // Shift IDs
+}
+
+export interface ChecklistItem {
+  itemId: string;
+  label: string;
+  required: boolean;
+  order: number;
+  notes?: string;
+}
+
+export interface ChecklistVersion {
+  versionNumber: number;
+  createdAt: string;
+  createdBy: string;
+  items: ChecklistItem[];
+}
+
+export interface IncidentReport {
+  id: string;
+  date: string;
+  time: string;
+  location: string;
+  incidentType: string;
+  description: string;
+  reportedBy: string;
+  witnesses: string[];
+  severity: 'minor' | 'moderate' | 'severe';
+  fileUrl?: string;
+  archived: boolean;
+  linkedAssignments?: string[];
+  createdAt: string;
+}
+
+export interface SeniorLifeguardResource {
+  id: string;
+  title: string;
+  resourceType: 'roster' | 'training' | 'audit' | 'lesson' | 'manual' | 'orientation';
+  fileUrl: string;
+  description?: string;
+  year?: number;
+  uploadedAt: string;
+  tags: string[];
+  accessibleTo: UserRole[];
+  linkedStaff?: string[];
+}

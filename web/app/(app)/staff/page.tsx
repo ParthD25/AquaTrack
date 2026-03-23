@@ -90,6 +90,8 @@ export default function StaffDirectoryPage() {
   const [creatingEmployee, setCreatingEmployee] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createResult, setCreateResult] = useState<{ tempPassword: string; resetLink: string; email: string } | null>(null);
+  const [deletingStaffId, setDeletingStaffId] = useState<string | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [newEmployee, setNewEmployee] = useState({
     firstName: '',
     lastName: '',
@@ -170,6 +172,29 @@ export default function StaffDirectoryPage() {
   const changePosition = async (id: string, positionId: string) => {
     setStaff(prev => prev.map(s => s.id === id ? { ...s, positionId } : s));
     await updateDoc(doc(db, 'staff', id), { positionId }).catch(console.error);
+    await updateDoc(doc(db, 'users', id), { positionId, role: positionId }).catch(console.error);
+  };
+
+  const deleteStaff = async (id: string) => {
+    if (!firebaseUser) return;
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch('/api/admin/delete-staff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ uid: id }),
+      });
+      if (!res.ok) throw new Error('Failed to delete');
+      setStaff(prev => prev.filter(s => s.id !== id));
+      setDeletingStaffId(null);
+      setDeleteConfirmName('');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete staff member');
+    }
   };
 
   const updateGradYear = async (id: string, gradYear: number | undefined) => {
@@ -457,6 +482,9 @@ export default function StaffDirectoryPage() {
                           </select>
                           <button className="btn btn-ghost btn-sm btn-icon" title={s.visible ? 'Hide' : 'Show'} onClick={() => toggleVisibility(s.id)} style={{ fontSize: '0.75rem' }}>
                             {s.visible ? '👁' : '🚫'}
+                          </button>
+                          <button className="btn btn-ghost btn-sm btn-icon" style={{ fontSize: '0.75rem', color: '#ef4444' }} title="Delete" onClick={() => setDeletingStaffId(s.id)}>
+                            🗑
                           </button>
                         </div>
                       )}
@@ -766,6 +794,36 @@ export default function StaffDirectoryPage() {
             </div>
             <div className="flex gap-3 mt-6">
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setCreateResult(null)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingStaffId && (
+        <div className="modal-overlay" onClick={() => setDeletingStaffId(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3 className="section-title mb-4">Delete Staff Member?</h3>
+            <p className="text-sm text-muted mb-4">This action cannot be undone. All audit records for this person will be deleted.</p>
+            <div className="card mb-4" style={{ background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+              <p className="font-semibold">{staff.find(s => s.id === deletingStaffId)?.firstName} {staff.find(s => s.id === deletingStaffId)?.lastName}</p>
+              <p className="text-xs text-muted mt-1">To confirm, type their full name:</p>
+              <input
+                className="form-input mt-2"
+                placeholder="Full name"
+                value={deleteConfirmName}
+                onChange={e => setDeleteConfirmName(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3">
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { setDeletingStaffId(null); setDeleteConfirmName(''); }}>Cancel</button>
+              <button
+                className="btn btn-danger"
+                style={{ flex: 1, background: '#ef4444', color: 'white', borderColor: '#ef4444' }}
+                disabled={deleteConfirmName !== `${staff.find(s => s.id === deletingStaffId)?.firstName} ${staff.find(s => s.id === deletingStaffId)?.lastName}`}
+                onClick={() => deleteStaff(deletingStaffId)}
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
