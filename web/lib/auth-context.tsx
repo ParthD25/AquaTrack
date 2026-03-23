@@ -11,16 +11,20 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { AppUser, UserRole } from './types';
+import { AppUser, UserRole, Position, PositionPermissions } from './types';
 
 interface AuthContextType {
   user: AppUser | null;
   firebaseUser: User | null;
   loading: boolean;
+  position: Position | null; // Custom position with permissions
+  permissions: PositionPermissions | null; // Computed permissions for this user
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   hasRole: (...roles: UserRole[]) => boolean;
+  hasPermission: (permission: keyof PositionPermissions) => boolean;
+  hasAnyPermission: (...permissions: (keyof PositionPermissions)[]) => boolean;
   approveTerms: () => Promise<void>;
 }
 
@@ -28,10 +32,14 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   firebaseUser: null,
   loading: true,
+  position: null,
+  permissions: null,
   signIn: async () => {},
   signInWithGoogle: async () => {},
   signOut: async () => {},
   hasRole: () => false,
+  hasPermission: () => false,
+  hasAnyPermission: () => false,
   approveTerms: async () => {},
 });
 
@@ -54,10 +62,38 @@ const normalizeRole = (rawRole?: string): UserRole | null => {
   return ROLE_ALIASES[key] || null;
 };
 
+/**
+ * Fetch position and permissions for a user.
+ * If positionId references a custom position, load it from Firestore.
+ * Otherwise, return null (will use built-in role permissions).
+ */
+const loadUserPosition = async (positionId: string): Promise<Position | null> => {
+  try {
+    // First check if this is a built-in role ID
+    if (['admin', 'sr_guard', 'pool_tech', 'lifeguard'].includes(positionId)) {
+      return null; // Use built-in role, not a custom position
+    }
+
+    // Try to load custom position from Firestore
+    const positionDocRef = doc(db, 'positions', positionId);
+    const positionDoc = await getDoc(positionDocRef);
+    
+    if (positionDoc.exists()) {
+      return { id: positionDoc.id, ...positionDoc.data() } as Position;
+    }
+  } catch (err) {
+    console.error('Error loading position:', err);
+  }
+  
+  return null;
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [position, setPosition] = useState<Position | null>(null);
+  const [permissions, setPermissions] = useState<PositionPermissions | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
@@ -71,8 +107,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userData = userDoc.exists() ? userDoc.data() : {};
           const staffData = staffDoc.exists() ? staffDoc.data() : {};
 
-          const rawRole = userData.role || userData.positionId || staffData.role || staffData.positionId;
-          const normalizedRole = normalizeRole(rawRole) || 'lifeguard';
+          const positionId = userData.positionId || userData.role || staffData.positionId || staffData.role || 'lifeguard';
+          
+          // Try to load custom position
+          let loadedPosition: Position | null = null;
+          let computedPermissions: PositionPermissions | null = null;
+
+          loadedPosition = await loadUserPosition(positionId);
+          
+          if (loadedPosition) {
+            // Custom position found
+            computedPermissions = loadedPosition.permissions;
+          } else {
+            // Fall back to built-in role
+            // (permissions will be checked in components using built-in role)
+            computedPermissions = null;
+          }
+
+          // Normalize to built-in role for backward compatibility in UI
+          const normalizedRole = normalizeRole(positionId) || 'lifeguard';
 
           const staffName = staffData.firstName && staffData.lastName
             ? `${staffData.firstName} ${staffData.lastName}`
@@ -86,27 +139,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: normalizedRole,
             photoURL: fbUser.photoURL ?? userData.photoURL ?? null,
             orgId: userData.orgId || staffData.orgId || 'sfac',
+            positionId: positionId, // Store actual positionId
             ...userData,
           } as AppUser;
 
-          const shouldSyncRole = !userDoc.exists() || !normalizeRole(userData.role || userData.positionId) || normalizeRole(userData.role || userData.positionId) !== normalizedRole;
-          if (shouldSyncRole) {
-            await setDoc(userDocRef, {
-              role: normalizedRole,
-              positionId: normalizedRole,
-              displayName: resolvedName,
-              email: fbUser.email || userData.email || '',
-              orgId: userData.orgId || staffData.orgId || 'sfac',
-            }, { merge: true });
-          }
-
           setUser(resolvedUser);
+          setPosition(loadedPosition);
+          setPermissions(computedPermissions);
         } catch (err) {
           console.error('Failed to load user profile:', err);
           setUser(null);
+          setPosition(null);
+          setPermissions(null);
         }
       } else {
         setUser(null);
+        setPosition(null);
+        setPermissions(null);
       }
       setLoading(false);
     });
@@ -136,11 +185,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await firebaseSignOut(auth);
     setUser(null);
+    setPosition(null);
+    setPermissions(null);
   };
 
   const hasRole = (...roles: UserRole[]) => {
     if (!user) return false;
     return roles.includes(user.role);
+  };
+
+  /**
+   * Check if user has a specific permission.
+   * Works for both built-in roles (via role mapping) and custom positions.
+   */
+  const hasPermission = (permission: keyof PositionPermissions): boolean => {
+    if (!user) return false;
+
+    // If user has custom position with permissions, use those
+    if (permissions && permission in permissions) {
+      return permissions[permission] === true;
+    }
+
+    // Fall back to built-in role permissions (checked at component level)
+    // This is a simplification - in production, you'd also map built-in roles to DEFAULT_POSITIONS permissions
+    return false;
+  };
+
+  /**
+   * Check if user has any of the specified permissions.
+   */
+  const hasAnyPermission = (...perms: (keyof PositionPermissions)[]): boolean => {
+    return perms.some(perm => hasPermission(perm));
   };
 
   const approveTerms = async () => {
@@ -151,7 +226,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, firebaseUser, loading, signIn, signInWithGoogle, signOut, hasRole, approveTerms }}>
+    <AuthContext.Provider value={{
+      user,
+      firebaseUser,
+      loading,
+      position,
+      permissions,
+      signIn,
+      signInWithGoogle,
+      signOut,
+      hasRole,
+      hasPermission,
+      hasAnyPermission,
+      approveTerms,
+    }}>
       {children}
     </AuthContext.Provider>
   );

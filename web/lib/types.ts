@@ -7,7 +7,8 @@ export interface AppUser {
   uid: string;
   email: string;
   displayName: string;
-  role: UserRole;
+  role: UserRole; // Normalized to built-in role for backward compatibility
+  positionId?: string; // Actual position ID (can be custom or built-in)
   photoURL?: string;
   orgId: string;
   hasAgreedToTerms?: boolean;
