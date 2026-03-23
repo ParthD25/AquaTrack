@@ -75,7 +75,9 @@ class _HomeScreenState extends State<HomeScreen> {
               setState(() {
                 _hasAgreed = data['hasAgreedToTerms'] == true;
                 _isLoadingAgreement = false;
-                _role = (data['role'] ?? data['positionId'] ?? 'lifeguard') as String;
+                _role =
+                    (data['role'] ?? data['positionId'] ?? 'lifeguard')
+                        as String;
               });
             }
           });
@@ -201,7 +203,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _buildNavItems().map((i) => i.page).toList()),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _buildNavItems().map((i) => i.page).toList(),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -228,7 +233,12 @@ class _HomeScreenState extends State<HomeScreen> {
           type: BottomNavigationBarType.fixed,
           elevation: 0,
           items: _buildNavItems()
-              .map((item) => BottomNavigationBarItem(icon: Icon(item.icon), label: item.label))
+              .map(
+                (item) => BottomNavigationBarItem(
+                  icon: Icon(item.icon),
+                  label: item.label,
+                ),
+              )
               .toList(),
         ),
       ),
@@ -500,27 +510,42 @@ class _DocsTabState extends State<_DocsTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Document Library', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Document Library',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF132040),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('documents_library').snapshots(),
+        stream: FirebaseFirestore.instance
+            .collection('documents_library')
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF)));
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
+            );
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+            return Center(
+              child: Text(
+                'Error: ${snapshot.error}',
+                style: const TextStyle(color: Colors.red),
+              ),
+            );
           }
 
-          final docs = snapshot.data?.docs
-              .map((d) => d.data() as Map<String, dynamic>)
-              .where((d) {
-                // Filter by access roles - check if user's role is in the accessRoles array
-                final accessRoles = (d['accessRoles'] as List<dynamic>?) ?? [];
-                return _canAccessDoc('') || accessRoles.contains(_userRole);
-              })
-              .toList() ?? [];
+          final docs =
+              snapshot.data?.docs
+                  .map((d) => d.data() as Map<String, dynamic>)
+                  .where((d) {
+                    // Filter by access roles - check if user's role is in the accessRoles array
+                    final accessRoles =
+                        (d['accessRoles'] as List<dynamic>?) ?? [];
+                    return _canAccessDoc('') || accessRoles.contains(_userRole);
+                  })
+                  .toList() ??
+              [];
 
           final categories = <String>{'all'};
           for (var doc in docs) {
@@ -532,7 +557,8 @@ class _DocsTabState extends State<_DocsTab> {
 
           final filtered = docs.where((d) {
             final category = d['category'] ?? 'operational';
-            if (_activeCategory != 'all' && category != _activeCategory) return false;
+            if (_activeCategory != 'all' && category != _activeCategory)
+              return false;
             return true;
           }).toList();
 
@@ -540,7 +566,12 @@ class _DocsTabState extends State<_DocsTab> {
             {'key': 'all', 'label': 'All Documents'},
             ...categories
                 .where((c) => c != 'all')
-                .map((c) => {'key': c, 'label': c[0].toUpperCase() + c.substring(1)})
+                .map(
+                  (c) => {
+                    'key': c,
+                    'label': c[0].toUpperCase() + c.substring(1),
+                  },
+                ),
           ];
 
           return ListView(
@@ -557,9 +588,14 @@ class _DocsTabState extends State<_DocsTab> {
                       child: ChoiceChip(
                         label: Text(c['label'] as String),
                         selected: selected,
-                        onSelected: (_) => setState(() => _activeCategory = key),
+                        onSelected: (_) =>
+                            setState(() => _activeCategory = key),
                         selectedColor: const Color(0xFF2DD4BF),
-                        labelStyle: TextStyle(color: selected ? const Color(0xFF0A1530) : Colors.white70),
+                        labelStyle: TextStyle(
+                          color: selected
+                              ? const Color(0xFF0A1530)
+                              : Colors.white70,
+                        ),
                         backgroundColor: const Color(0xFF132040),
                       ),
                     );
@@ -579,21 +615,47 @@ class _DocsTabState extends State<_DocsTab> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF132040),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.13),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       if (description.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        Text(description, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        Text(
+                          description,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                       const SizedBox(height: 4),
-                      Text('Category: $category', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      Text(
+                        'Category: $category',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
                       if (tags.isNotEmpty) ...[
                         const SizedBox(height: 4),
-                        Text('Tags: ${tags.take(2).toList().join(', ')}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                        Text(
+                          'Tags: ${tags.take(2).toList().join(', ')}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                       const SizedBox(height: 12),
                       ElevatedButton(
@@ -601,7 +663,10 @@ class _DocsTabState extends State<_DocsTab> {
                           if (fileUrl.isEmpty) return;
                           final uri = Uri.parse(fileUrl);
                           if (await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
                           }
                         },
                         child: const Text('Open Document'),
@@ -611,7 +676,12 @@ class _DocsTabState extends State<_DocsTab> {
                 );
               }),
               if (filtered.isEmpty)
-                const Center(child: Text('No documents found', style: TextStyle(color: Colors.white54))),
+                const Center(
+                  child: Text(
+                    'No documents found',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
             ],
           );
         },
@@ -630,23 +700,59 @@ class _InventoryTab extends StatefulWidget {
 
 class _InventoryTabState extends State<_InventoryTab> {
   static const _items = [
-    {'id': 'emergency_oxygen_first_aid', 'label': 'Emergency Oxygen - First Aid Room', 'unit': 'PSI'},
-    {'id': 'emergency_oxygen_office', 'label': 'Emergency Oxygen - Office', 'unit': 'PSI'},
+    {
+      'id': 'emergency_oxygen_first_aid',
+      'label': 'Emergency Oxygen - First Aid Room',
+      'unit': 'PSI',
+    },
+    {
+      'id': 'emergency_oxygen_office',
+      'label': 'Emergency Oxygen - Office',
+      'unit': 'PSI',
+    },
     {'id': 'gloves_xs', 'label': 'Gloves - XS', 'unit': 'boxes'},
     {'id': 'gloves_s', 'label': 'Gloves - S', 'unit': 'boxes'},
     {'id': 'gloves_m', 'label': 'Gloves - M', 'unit': 'boxes'},
     {'id': 'gloves_l', 'label': 'Gloves - L', 'unit': 'boxes'},
     {'id': 'gloves_xl', 'label': 'Gloves - XL', 'unit': 'boxes'},
-    {'id': 'bandaids_variety', 'label': 'BandAids - E+R Variety Pack', 'unit': 'boxes'},
-    {'id': 'bandaids_strip', 'label': 'BandAids - Medi-First 7/8" x 3" Strip', 'unit': 'boxes'},
-    {'id': 'stretch_bandage_1', 'label': 'Stretch Bandages - 1" x 75"', 'unit': 'boxes'},
-    {'id': 'stretch_bandage_2', 'label': 'Stretch Bandages - 2" x 75"', 'unit': 'boxes'},
-    {'id': 'stretch_bandage_3', 'label': 'Stretch Bandages - 3" x 75"', 'unit': 'boxes'},
+    {
+      'id': 'bandaids_variety',
+      'label': 'BandAids - E+R Variety Pack',
+      'unit': 'boxes',
+    },
+    {
+      'id': 'bandaids_strip',
+      'label': 'BandAids - Medi-First 7/8" x 3" Strip',
+      'unit': 'boxes',
+    },
+    {
+      'id': 'stretch_bandage_1',
+      'label': 'Stretch Bandages - 1" x 75"',
+      'unit': 'boxes',
+    },
+    {
+      'id': 'stretch_bandage_2',
+      'label': 'Stretch Bandages - 2" x 75"',
+      'unit': 'boxes',
+    },
+    {
+      'id': 'stretch_bandage_3',
+      'label': 'Stretch Bandages - 3" x 75"',
+      'unit': 'boxes',
+    },
     {'id': 'gauze_2x2', 'label': 'Gauze Pads - 2" x 2"', 'unit': 'boxes'},
     {'id': 'gauze_3x3', 'label': 'Gauze Pads - 3" x 3"', 'unit': 'boxes'},
-    {'id': 'gauze_4x4', 'label': 'Gauze Pads - 4" x 4" (E+R/Dynarex/Medline)', 'unit': 'boxes'},
+    {
+      'id': 'gauze_4x4',
+      'label': 'Gauze Pads - 4" x 4" (E+R/Dynarex/Medline)',
+      'unit': 'boxes',
+    },
     {'id': 'knuckle_bandages', 'label': 'Knuckle Bandages', 'unit': 'boxes'},
-    {'id': 'medi_rip_bandage', 'label': 'Medi-Rip Self-Adherent Bandage', 'unit': 'rolls'},
+    {
+      'id': 'medi_rip_bandage',
+      'label': 'Medi-Rip Self-Adherent Bandage',
+      'unit': 'rolls',
+    },
     {'id': 'medical_tape', 'label': 'Medical Tape Rolls', 'unit': 'rolls'},
     {'id': 'razors', 'label': 'Razors', 'unit': 'units'},
     {'id': 'scissors', 'label': 'Scissors', 'unit': 'units'},
@@ -656,12 +762,32 @@ class _InventoryTabState extends State<_InventoryTab> {
     {'id': 'pulsar_cleaner', 'label': 'Pulsar Cleaner', 'unit': 'bottles'},
     {'id': 'co2_tank_1', 'label': 'CO2 Level Tank 1', 'unit': 'level'},
     {'id': 'co2_tank_2', 'label': 'CO2 Level Tank 2', 'unit': 'level'},
-    {'id': 'muriatic_acid_tank_1', 'label': 'Muriatic Acid Level Tank 1', 'unit': 'level'},
-    {'id': 'muriatic_acid_tank_2', 'label': 'Muriatic Acid Level Tank 2', 'unit': 'level'},
-    {'id': 'pulsar_briquettes_100', 'label': 'Pulsar Briquettes - 100 lb', 'unit': 'lbs'},
-    {'id': 'pulsar_briquettes_50', 'label': 'Pulsar Briquettes - 50 lb', 'unit': 'lbs'},
+    {
+      'id': 'muriatic_acid_tank_1',
+      'label': 'Muriatic Acid Level Tank 1',
+      'unit': 'level',
+    },
+    {
+      'id': 'muriatic_acid_tank_2',
+      'label': 'Muriatic Acid Level Tank 2',
+      'unit': 'level',
+    },
+    {
+      'id': 'pulsar_briquettes_100',
+      'label': 'Pulsar Briquettes - 100 lb',
+      'unit': 'lbs',
+    },
+    {
+      'id': 'pulsar_briquettes_50',
+      'label': 'Pulsar Briquettes - 50 lb',
+      'unit': 'lbs',
+    },
     {'id': 'liquid_chlorine', 'label': 'Liquid Chlorine', 'unit': 'gallons'},
-    {'id': 'sodium_bicarbonate', 'label': 'Sodium Bicarbonate (50 lb bags)', 'unit': 'bags'},
+    {
+      'id': 'sodium_bicarbonate',
+      'label': 'Sodium Bicarbonate (50 lb bags)',
+      'unit': 'bags',
+    },
     {'id': 'calcium', 'label': 'Calcium (50 lb bags)', 'unit': 'bags'},
     {'id': 'dpd1a_reagent', 'label': 'DPD1A Test Reagent', 'unit': 'bottles'},
     {'id': 'dpd1b_reagent', 'label': 'DPD1B Test Reagent', 'unit': 'bottles'},
@@ -695,10 +821,14 @@ class _InventoryTabState extends State<_InventoryTab> {
     super.dispose();
   }
 
-  bool get _canAccess => ['admin', 'sr_guard', 'pool_tech'].contains(widget.role);
+  bool get _canAccess =>
+      ['admin', 'sr_guard', 'pool_tech'].contains(widget.role);
 
   Future<void> _loadMonth() async {
-    final snap = await FirebaseFirestore.instance.collection('inventory_entries').doc(_month).get();
+    final snap = await FirebaseFirestore.instance
+        .collection('inventory_entries')
+        .doc(_month)
+        .get();
     if (snap.exists) {
       final data = snap.data() as Map<String, dynamic>;
       final items = (data['items'] as Map<String, dynamic>?) ?? {};
@@ -728,14 +858,17 @@ class _InventoryTabState extends State<_InventoryTab> {
       final id = item['id'] as String;
       items[id] = num.tryParse(_controllers[id]?.text ?? '0') ?? 0;
     }
-    await FirebaseFirestore.instance.collection('inventory_entries').doc(_month).set({
-      'month': _month,
-      'items': items,
-      'notes': _notesController.text.trim(),
-      'updatedAt': DateTime.now().toIso8601String(),
-      'updatedBy': user.uid,
-      'updatedByName': user.displayName ?? user.email ?? 'User',
-    }, SetOptions(merge: true));
+    await FirebaseFirestore.instance
+        .collection('inventory_entries')
+        .doc(_month)
+        .set({
+          'month': _month,
+          'items': items,
+          'notes': _notesController.text.trim(),
+          'updatedAt': DateTime.now().toIso8601String(),
+          'updatedBy': user.uid,
+          'updatedByName': user.displayName ?? user.email ?? 'User',
+        }, SetOptions(merge: true));
     setState(() {
       _saving = false;
       _status = 'Saved.';
@@ -747,10 +880,18 @@ class _InventoryTabState extends State<_InventoryTab> {
     if (!_canAccess) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Inventory', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text(
+            'Inventory',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           backgroundColor: const Color(0xFF132040),
         ),
-        body: const Center(child: Text('Access restricted', style: TextStyle(color: Colors.white54))),
+        body: const Center(
+          child: Text(
+            'Access restricted',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
       );
     }
 
@@ -764,7 +905,10 @@ class _InventoryTabState extends State<_InventoryTab> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inventory', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Inventory',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF132040),
       ),
       body: ListView(
@@ -792,7 +936,10 @@ class _InventoryTabState extends State<_InventoryTab> {
                 ),
               ),
               const SizedBox(width: 12),
-              ElevatedButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving...' : 'Save')),
+              ElevatedButton(
+                onPressed: _saving ? null : _save,
+                child: Text(_saving ? 'Saving...' : 'Save'),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -809,9 +956,18 @@ class _InventoryTabState extends State<_InventoryTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item['label'] as String, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text(
+                    item['label'] as String,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text('Unit: ${item['unit']}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(
+                    'Unit: ${item['unit']}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _controllers[id],
@@ -840,7 +996,10 @@ class _InventoryTabState extends State<_InventoryTab> {
           if (_status.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Text(_status, style: const TextStyle(color: Colors.white70)),
+              child: Text(
+                _status,
+                style: const TextStyle(color: Colors.white70),
+              ),
             ),
         ],
       ),
@@ -855,21 +1014,36 @@ class _AdminTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin Access', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Admin Access',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: const Color(0xFF132040),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('staff').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF)));
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2DD4BF)),
+            );
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+            return Center(
+              child: Text(
+                'Error: ${snapshot.error}',
+                style: const TextStyle(color: Colors.red),
+              ),
+            );
           }
           final staffDocs = snapshot.data?.docs ?? [];
           if (staffDocs.isEmpty) {
-            return const Center(child: Text('No staff records found', style: TextStyle(color: Colors.white54)));
+            return const Center(
+              child: Text(
+                'No staff records found',
+                style: TextStyle(color: Colors.white54),
+              ),
+            );
           }
           return ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -890,26 +1064,50 @@ class _AdminTab extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       value: positionId,
                       dropdownColor: const Color(0xFF132040),
                       items: const [
-                        DropdownMenuItem(value: 'admin', child: Text('Administrator')),
-                        DropdownMenuItem(value: 'sr_guard', child: Text('Senior Guard')),
-                        DropdownMenuItem(value: 'pool_tech', child: Text('Pool Tech')),
-                        DropdownMenuItem(value: 'lifeguard', child: Text('Lifeguard')),
+                        DropdownMenuItem(
+                          value: 'admin',
+                          child: Text('Administrator'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'sr_guard',
+                          child: Text('Senior Guard'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'pool_tech',
+                          child: Text('Pool Tech'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'lifeguard',
+                          child: Text('Lifeguard'),
+                        ),
                       ],
                       onChanged: (value) async {
                         if (value == null) return;
-                        await FirebaseFirestore.instance.collection('staff').doc(id).set({
-                          'positionId': value,
-                        }, SetOptions(merge: true));
-                        await FirebaseFirestore.instance.collection('users').doc(id).set({
-                          'positionId': value,
-                          'role': value,
-                        }, SetOptions(merge: true));
+                        await FirebaseFirestore.instance
+                            .collection('staff')
+                            .doc(id)
+                            .set({
+                              'positionId': value,
+                            }, SetOptions(merge: true));
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(id)
+                            .set({
+                              'positionId': value,
+                              'role': value,
+                            }, SetOptions(merge: true));
                       },
                       decoration: const InputDecoration(
                         labelText: 'Role',
@@ -928,4 +1126,3 @@ class _AdminTab extends StatelessWidget {
     );
   }
 }
-
