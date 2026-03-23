@@ -50,8 +50,8 @@ class _LoginScreenState extends State<LoginScreen> {
         await GoogleSignIn.instance.initialize();
         _googleInitialized = true;
       }
-      final GoogleSignInAccount googleUser =
-          await GoogleSignIn.instance.authenticate();
+      final GoogleSignInAccount googleUser = await GoogleSignIn.instance
+          .authenticate();
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
       if (googleAuth.idToken == null) {
         setState(() {

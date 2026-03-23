@@ -385,7 +385,9 @@ class _AuditsTab extends StatelessWidget {
                 child: Row(
                   children: [
                     CircleAvatar(
-                      backgroundColor: const Color(0xFF2DD4BF).withValues(alpha: 51),
+                      backgroundColor: const Color(
+                        0xFF2DD4BF,
+                      ).withValues(alpha: 51),
                       child: Text(
                         name[0],
                         style: const TextStyle(
