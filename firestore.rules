@@ -9,20 +9,26 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function roleTier() {
+      // Use new roleTier field, fall back to role for backward compatibility during transition
+      return userDoc().data.roleTier ?? userDoc().data.role;
+    }
+
     function role() {
-      return userDoc().data.role;
+      // Deprecated: use roleTier() instead
+      return roleTier();
     }
 
     function isAdmin() {
-      return isSignedIn() && role() == 'admin';
+      return isSignedIn() && roleTier() == 'admin';
     }
 
     function isSrGuard() {
-      return isSignedIn() && (role() == 'admin' || role() == 'sr_guard');
+      return isSignedIn() && (roleTier() == 'admin' || roleTier() == 'sr_guard');
     }
 
     function isStaff() {
-      return isSignedIn() && (role() == 'admin' || role() == 'sr_guard' || role() == 'pool_tech' || role() == 'lifeguard');
+      return isSignedIn() && (roleTier() == 'admin' || roleTier() == 'sr_guard' || roleTier() == 'pool_tech' || roleTier() == 'lifeguard');
     }
 
     match /users/{userId} {
@@ -58,6 +64,19 @@ service cloud.firestore {
       allow create, update, delete: if false; // No new writes to old collection
     }
 
+    // PHASE 1C: New documents collection (replaces documents_library)
+    // Using 'documents' as canonical collection name with final schema
+    // For now, this rule is placeholder; will be activated in Phase 1C migration
+    // TODO: This will replace documents_library after successful migration
+    // match /documents/{docId} {
+    //   allow read: if isStaff() && (
+    //     resource.data.visibility == 'all_staff' ||
+    //     roleTier() in resource.data.accessRoles
+    //   );
+    //   allow create, update: if isAdmin();
+    //   allow delete: if isAdmin();
+    // }
+
     match /task_completions/{taskId} {
       allow read, write: if isStaff();
     }
@@ -68,7 +87,31 @@ service cloud.firestore {
     }
 
     match /shift_checklists/{checklistId} {
-      allow read, create, update: if isSignedIn() && (request.auth.uid in checklistId || isAdmin());
+      // Ownership check: stored in ownerUid field instead of parsing the ID
+      allow read: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid || 
+        isAdmin() || 
+        isSrGuard()
+      );
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid || 
+        isAdmin() || 
+        isSrGuard()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /positions/{id} {
+      // Position definitions (admin-managed job titles and roles)
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /inventory_entries/{id} {
+      // Inventory tracking (chemicals, supplies, equipment)
+      allow read: if isStaff();
+      allow create, update: if isAdmin() || isSrGuard();
       allow delete: if isAdmin();
     }
 
@@ -79,11 +122,14 @@ service cloud.firestore {
 
     // Document Library & Archives
     // documents_library: main document storage with role-based access
+    // NOTE: During Phase 1C, this transitions to 'documents' collection
     match /documents_library/{docId} {
-      // Allow read if user is staff AND (doc is public to all staff OR user's role is in accessRoles)
+      // Allow read if user is staff AND:
+      // - visibility is 'all_staff', OR
+      // - user's roleTier is in the accessRoles array
       allow read: if isStaff() && (
-        resource.data.accessRoles == ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] ||
-        role() in resource.data.accessRoles
+        resource.data.visibility == 'all_staff' ||
+        roleTier() in resource.data.accessRoles
       );
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
@@ -119,6 +165,29 @@ service cloud.firestore {
 
     match /senior_lifeguard_resources/{resourceId} {
       allow read: if isSrGuard();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Certification system (Phase 3A)
+    match /cert_templates/{templateId} {
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /staff_certifications/{certId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.staffUid ||
+        isAdmin() ||
+        isSrGuard()
+      );
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (request.auth.uid == resource.data.staffUid && resource.data.status == 'draft');
+      allow delete: if isAdmin();
+    }
+
+    // Senior profiles (Phase 3B)
+    match /senior_profiles/{profileId} {
+      allow read: if isStaff();
       allow create, update, delete: if isAdmin();
     }
 

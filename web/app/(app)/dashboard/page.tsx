@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { DEFAULT_SHIFTS, AUDIT_TYPES } from '@/lib/types';
 import { format } from 'date-fns';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+// Demo tasks for now (will be replaced once real shift_tasks are populated)
 const DEMO_TASKS = [
   { id: '1', title: 'Chemical Check - Main Pool', category: 'chemical', done: false, priority: 'high' },
   { id: '2', title: 'AED Equipment Inspection', category: 'safety', done: false, priority: 'high' },
@@ -18,6 +18,23 @@ const DEMO_TASKS = [
   { id: '6', title: 'Locker Room Inspection', category: 'cleaning', done: false, priority: 'low' },
   { id: '7', title: 'Chemical Log Entry', category: 'chemical', done: false, priority: 'medium' },
 ];
+
+interface ShiftTemplate {
+  id: string;
+  name: string;
+  days: string[];
+  startTime: string;
+  endTime: string;
+  active: boolean;
+  tasks: Record<string, { title: string; category: string; priority: string }>;
+}
+
+interface AuditTemplate {
+  key: string;
+  label: string;
+  description: string;
+  icon: string;
+}
 
 const DEMO_AUDITS_NEEDED = [
   { name: 'Patrick Ama', missing: ['VAT', 'Brick Test'] },
@@ -33,30 +50,30 @@ const ROLE_LABELS: Record<string, string> = {
   lifeguard: 'Lifeguard',
 };
 
-function getCurrentShift() {
+function getCurrentShift(shiftTemplates: ShiftTemplate[]): ShiftTemplate | null {
   const now = new Date();
   const day = now.toLocaleDateString('en', { weekday: 'long' }).toLowerCase();
   const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   
-  for (const shift of DEFAULT_SHIFTS) {
-    if (shift.days.includes(day) && timeStr >= shift.startTime && timeStr <= shift.endTime) {
+  for (const shift of shiftTemplates) {
+    if (shift.days.includes(day) && shift.active && timeStr >= shift.startTime && timeStr <= shift.endTime) {
       return shift;
     }
   }
   return null;
 }
 
-function getNextShift() {
+function getNextShift(shiftTemplates: ShiftTemplate[]): ShiftTemplate | null {
   const now = new Date();
   const day = now.toLocaleDateString('en', { weekday: 'long' }).toLowerCase();
   const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   
-  for (const shift of DEFAULT_SHIFTS) {
-    if (shift.days.includes(day) && timeStr < shift.startTime) {
+  for (const shift of shiftTemplates) {
+    if (shift.days.includes(day) && shift.active && timeStr < shift.startTime) {
       return shift;
     }
   }
-  return DEFAULT_SHIFTS[0];
+  return shiftTemplates.length > 0 ? shiftTemplates[0] : null;
 }
 
 export default function DashboardPage() {
@@ -68,8 +85,33 @@ export default function DashboardPage() {
   const [totalStaff, setTotalStaff] = useState(38);
   const [auditsNeeded, setAuditsNeeded] = useState<{name: string, missing: string[]}[]>(DEMO_AUDITS_NEEDED);
   const [showAuditsNeeded, setShowAuditsNeeded] = useState(false);
+  const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplate[]>([]);
+  const [auditTemplates, setAuditTemplates] = useState<AuditTemplate[]>([]);
 
   useEffect(() => {
+    // Load shift and audit templates from Firestore
+    async function fetchTemplates() {
+      try {
+        const shiftsSnap = await getDocs(collection(db, 'shift_templates'));
+        const shiftsData: ShiftTemplate[] = [];
+        shiftsSnap.forEach(d => {
+          shiftsData.push({ id: d.id, ...d.data() } as ShiftTemplate);
+        });
+        setShiftTemplates(shiftsData.sort((a,b) => (a.id as any).localeCompare(b.id as any)));
+
+        const auditsSnap = await getDocs(collection(db, 'audit_templates'));
+        const auditsData: AuditTemplate[] = [];
+        auditsSnap.forEach(d => {
+          auditsData.push({ key: d.id, ...d.data() } as AuditTemplate);
+        });
+        setAuditTemplates(auditsData);
+      } catch (e) {
+        console.error('Failed to load templates, using defaults', e);
+        // Will fall back to using DEMO_TASKS and local logic
+      }
+    }
+    fetchTemplates();
+
     // 1. Fetch Staff Stats
     async function fetchStats() {
       try {
@@ -80,7 +122,7 @@ export default function DashboardPage() {
           const s = d.data();
           if (s.status === 'former' || s.status === 'inactive') return;
           const missing: string[] = [];
-          AUDIT_TYPES.forEach(t => {
+          auditTemplates.forEach(t => {
             if (!s.audits || !s.audits[t.key]?.completed) {
               missing.push(t.label || t.key);
             }
@@ -92,7 +134,9 @@ export default function DashboardPage() {
         setAuditsNeeded(needed.sort((a,b) => b.missing.length - a.missing.length));
       } catch (e) { console.error('Dashboard fetch error', e); }
     }
-    fetchStats();
+    if (auditTemplates.length > 0) {
+      fetchStats();
+    }
 
     // 2. Real-Time Task Listener
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -106,11 +150,11 @@ export default function DashboardPage() {
     });
 
     return () => unsubTasks();
-  }, []);
+  }, [auditTemplates]);
 
   const now = new Date();
-  const currentShift = getCurrentShift();
-  const nextShift = getNextShift();
+  const currentShift = getCurrentShift(shiftTemplates);
+  const nextShift = getNextShift(shiftTemplates);
   
   const augmentedTasks = tasks.map(t => ({
     ...t,
@@ -194,7 +238,7 @@ export default function DashboardPage() {
             <span style={{ fontSize: '1.25rem' }}>✓</span>
           </div>
           <div className="stat-value" style={{ color: 'var(--green-400)' }}>
-            {AUDIT_TYPES.length}
+            {auditTemplates.length}
           </div>
           <div className="stat-label">Audit Types Active</div>
         </button>
@@ -325,9 +369,9 @@ export default function DashboardPage() {
           <div className="card">
             <h2 className="section-title mb-4">🕐 Today&apos;s Shifts</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {DEFAULT_SHIFTS.filter(s => {
+              {shiftTemplates.filter(s => {
                 const day = now.toLocaleDateString('en', { weekday: 'long' }).toLowerCase();
-                return s.days.includes(day);
+                return s.days.includes(day) && s.active;
               }).map(shift => {
                 const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                 const isActive = timeStr >= shift.startTime && timeStr <= shift.endTime;

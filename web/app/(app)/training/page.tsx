@@ -60,12 +60,19 @@ export default function TrainingPage() {
   useEffect(() => {
     const fetchTraining = async () => {
       try {
-        // Fetch from documents_library with category = 'training'
-        const snap = await getDocs(query(collection(db, 'documents_library'), where('category', '==', 'training')));
+        // Fetch from documents collection with category = 'training' (or fallback to documents_library)
+        let snap;
+        try {
+          snap = await getDocs(query(collection(db, 'documents'), where('category', '==', 'training')));
+        } catch {
+          // Fallback to old collection during transition
+          snap = await getDocs(query(collection(db, 'documents_library'), where('category', '==', 'training')));
+        }
+        
         const trainingDocs: TrainingModule[] = [];
         
         snap.forEach(d => {
-          const data = d.data() as DocumentLibraryItem;
+          const data = d.data() as any;
           
           trainingDocs.push({
             id: d.id,

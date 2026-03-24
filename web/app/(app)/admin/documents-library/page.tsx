@@ -37,7 +37,7 @@ export default function DocumentLibraryPage() {
   const [uploadTags, setUploadTags] = useState('');
   const [uploadAccess, setUploadAccess] = useState<string[]>(['admin', 'sr_guard', 'pool_tech', 'lifeguard']);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.roleTier === 'admin';
 
   useEffect(() => {
     async function fetchData() {
@@ -99,24 +99,82 @@ export default function DocumentLibraryPage() {
 
       const fileUrl = await getDownloadURL(storageRef);
 
-      // Create Firestore document
+      // Create Firestore document ID
       const docId = `doc_${timestamp}`;
-      const newDoc: DocumentLibraryItem = {
+      const uploadedAt = new Date().toISOString();
+      const uploadedBy = user?.displayName || 'Admin';
+      const tags = uploadTags.split(',').map(t => t.trim()).filter(t => t);
+      
+      // Infer document type from file
+      let docType: 'pdf' | 'docx' | 'xlsx' | 'image' | 'link' | 'video' = 'docx';
+      if (uploadFile.type.includes('pdf')) docType = 'pdf';
+      else if (uploadFile.type.includes('spreadsheet') || uploadFile.type.includes('excel')) docType = 'xlsx';
+      else if (uploadFile.type.includes('image')) docType = 'image';
+      else if (uploadFile.type.includes('video') || uploadCategory === 'training') docType = 'video';
+
+      // Infer MIME type
+      let mimeType = uploadFile.type || 'application/octet-stream';
+      const mimeTypeMap: Record<string, string> = {
+        'pdf': 'application/pdf',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'doc': 'application/msword',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'xls': 'application/vnd.ms-excel',
+        'image': 'image/jpeg',
+        'video': 'video/mp4',
+      };
+      mimeType = mimeTypeMap[docType] || uploadFile.type || 'application/octet-stream';
+
+      // Determine visibility
+      const isAllStaff = uploadAccess.length === 4 &&
+        uploadAccess.includes('admin') &&
+        uploadAccess.includes('sr_guard') &&
+        uploadAccess.includes('pool_tech') &&
+        uploadAccess.includes('lifeguard');
+      const visibility = isAllStaff ? 'all_staff' : 'restricted';
+
+      // Old format for documents_library (backward compat)
+      const oldDoc: DocumentLibraryItem = {
         id: docId,
         title: uploadTitle,
         category: uploadCategory,
-        type: uploadFile.type.includes('pdf') ? 'pdf' : uploadCategory === 'training' ? 'video' : 'docx',
+        type: docType,
         fileUrl,
         fileSize: uploadFile.size,
-        uploadedAt: new Date().toISOString(),
-        uploadedBy: user?.displayName || 'Admin',
-        tags: uploadTags.split(',').map(t => t.trim()).filter(t => t),
+        uploadedAt,
+        uploadedBy,
+        tags,
         accessRoles: uploadAccess as any,
         version: 1,
         isActive: true,
       };
 
-      await setDoc(doc(db, 'documents_library', docId), newDoc);
+      // New format for documents collection
+      const newDoc = {
+        id: docId,
+        title: uploadTitle,
+        description: '',
+        category: uploadCategory,
+        subCategory: undefined,
+        type: docType,
+        mimeType,
+        fileUrl,
+        storagePath: `documents/${uploadFile.name}`,
+        accessRoles: uploadAccess,
+        visibility,
+        isActive: true,
+        version: 1,
+        tags,
+        uploadedAt,
+        uploadedBy,
+        sortOrder: 0,
+      };
+
+      // Dual-write: Write to both collections (transition period)
+      await Promise.all([
+        setDoc(doc(db, 'documents_library', docId), oldDoc),
+        setDoc(doc(db, 'documents', docId), newDoc),
+      ]);
 
       // Reset form
       setUploadFile(null);
@@ -124,8 +182,8 @@ export default function DocumentLibraryPage() {
       setUploadTags('');
       setUploadAccess(['admin', 'sr_guard', 'pool_tech', 'lifeguard']);
 
-      // Add to local state
-      setDocuments(prev => [...prev, newDoc]);
+      // Add to local state (use old format for display)
+      setDocuments(prev => [...prev, oldDoc]);
 
       alert('✅ Document uploaded successfully!');
     } catch (err: any) {

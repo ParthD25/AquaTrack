@@ -34,6 +34,7 @@ export async function POST(req: Request) {
       firstName,
       lastName,
       email,
+      roleTier,
       positionId,
       phone,
       address,
@@ -42,9 +43,16 @@ export async function POST(req: Request) {
       orgId = 'sfac',
     } = body;
 
-    if (!firstName || !lastName || !email || !positionId) {
+    if (!firstName || !lastName || !email) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    // Validate roleTier (security tier) — must be one of four built-in values
+    const allowedRoles = ['admin', 'sr_guard', 'pool_tech', 'lifeguard'];
+    const finalRoleTier = (roleTier && allowedRoles.includes(roleTier)) ? roleTier : 'lifeguard';
+    
+    // positionId defaults to roleTier if not specified (can be custom or built-in)
+    const finalPositionId = positionId || finalRoleTier;
 
     const tempPassword = generateTempPassword();
     const userRecord = await adminAuth.createUser({
@@ -54,15 +62,15 @@ export async function POST(req: Request) {
       disabled: false,
     });
 
-    const allowedRoles = ['admin', 'sr_guard', 'pool_tech', 'lifeguard'];
-    const role = allowedRoles.includes(positionId) ? positionId : 'lifeguard';
-
+    // Write both roleTier (security) and positionId (job title)
+    // During transition period, also write 'role' for backward compatibility
     const userDoc = {
       uid: userRecord.uid,
       email,
       displayName: `${firstName} ${lastName}`,
-      role,
-      positionId,
+      roleTier: finalRoleTier, // NEW: security tier only
+      positionId: finalPositionId, // NEW: job title (can be custom)
+      role: finalRoleTier, // Legacy compat: will remove after transition
       orgId,
       hasAgreedToTerms: false,
       mustResetPassword: true,
@@ -76,7 +84,7 @@ export async function POST(req: Request) {
       id: userRecord.uid,
       firstName,
       lastName,
-      positionId,
+      positionId: finalPositionId,
       email,
       phone: phone || '',
       address: address || '',

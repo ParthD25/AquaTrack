@@ -1,104 +1,68 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import {
-  DEFAULT_POSITIONS, DEFAULT_SHIFTS, Position,
-  PERMISSION_GROUPS, PERMISSION_LABELS, PositionPermissions, ShiftDefinition
-} from '@/lib/types';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { StaffMember } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { ChevronRight } from 'lucide-react';
 
-type AdminTab = 'positions' | 'documents' | 'access' | 'users' | 'shifts' | 'history';
-
-// Demo docs — same set as documents page
-const DEMO_DOCS = [
-  { id: '1', name: 'SFAC Lifeguard Manual', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
-  { id: '2', name: 'Daily/Weekly LG Checklist — Summer', fileType: 'docx', accessPositions: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
-  { id: '3', name: 'Daily/Weekly LG Checklist — Offseason', fileType: 'docx', accessPositions: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
-  { id: '4', name: 'VAT Audit Sheet', fileType: 'docx', accessPositions: ['admin', 'sr_guard'] },
-  { id: '5', name: 'Lifeguard CPR Audit', fileType: 'docx', accessPositions: ['admin', 'sr_guard'] },
-  { id: '6', name: 'Swim Instructor Audit', fileType: 'pdf', accessPositions: ['admin', 'sr_guard'] },
-  { id: '7', name: 'Pre-Opening Inspection Log 2023', fileType: 'docx', accessPositions: ['admin', 'sr_guard'] },
-  { id: '8', name: 'Senior Lifeguard Orientation', fileType: 'pptx', accessPositions: ['admin', 'sr_guard'] },
-  { id: '9', name: 'Monthly Maintenance — On Season', fileType: 'docx', accessPositions: ['admin', 'sr_guard', 'pool_tech'] },
-  { id: '10', name: 'Monthly Maintenance — Off Season', fileType: 'docx', accessPositions: ['admin', 'sr_guard', 'pool_tech'] },
-  { id: '11', name: 'Chemical Check Log', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech'] },
-  { id: '12', name: 'Chemical & First Aid Inventory', fileType: 'docx', accessPositions: ['admin', 'sr_guard', 'pool_tech'] },
-  { id: '13', name: 'Pool Tech Waterslide Training', fileType: 'docx', accessPositions: ['admin', 'sr_guard', 'pool_tech'] },
-  { id: '14', name: 'O&M Manual — Group A', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech'] },
-  { id: '15', name: 'O&M Manual — Group P', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech'] },
-  { id: '16', name: 'BECSystem Quick Reference', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech'] },
-  { id: '17', name: 'Incident Report 2024', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
-  { id: '18', name: 'AED Daily Checklist', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
-  { id: '19', name: 'Wildfire Smoke Training 2020', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
-  { id: '20', name: 'Swim Instructor Manual 2018', fileType: 'pdf', accessPositions: ['admin', 'sr_guard', 'pool_tech', 'lifeguard'] },
-];
-
-// Demo change history
-const DEMO_HISTORY = [
-  { id: '1', performedBy: 'Branden Uyeda', action: 'add_audit', description: 'Marked VAT audit complete for Emma Knab', performedAt: '2026-03-20T14:32:00Z', undone: false },
-  { id: '2', performedBy: 'Sophia Smith', action: 'add_audit', description: 'Marked CPR audit complete for Patrick Ama', performedAt: '2026-03-20T11:15:00Z', undone: false },
-  { id: '3', performedBy: 'Branden Uyeda', action: 'add_audit', description: 'Marked Brick Test complete for Ethan Gallagher', performedAt: '2026-03-19T16:45:00Z', undone: false },
-  { id: '4', performedBy: 'Admin', action: 'toggle_doc_access', description: 'Added "lifeguard" access to Swim Instructor Manual', performedAt: '2026-03-18T09:00:00Z', undone: false },
-  { id: '5', performedBy: 'Admin', action: 'add_staff', description: 'Added new employee: Katie Clinton (Lifeguard)', performedAt: '2026-03-15T10:30:00Z', undone: false },
-  { id: '6', performedBy: 'Sophia Smith', action: 'add_audit', description: 'Marked Live Recognition audit for Bryan Jung', performedAt: '2026-03-14T13:20:00Z', undone: true },
-];
-
-const ACTION_ICON: Record<string, string> = {
-  add_audit: '✓', edit_audit: '✏️', add_staff: '👤', remove_staff: '🗑', toggle_visibility: '👁',
-  change_role: '🏷', upload_doc: '📁', toggle_doc_access: '🔐',
-};
-
-const MOCK_USERS = [
-  { uid: '1', name: 'Branden Uyeda', email: 'branden@sfac.org', positionId: 'sr_guard', active: true, lastLogin: '2026-03-20' },
-  { uid: '2', name: 'Hector Macias', email: 'hector@sfac.org', positionId: 'pool_tech', active: true, lastLogin: '2026-03-19' },
-  { uid: '3', name: 'Sophia Smith', email: 'sophia@sfac.org', positionId: 'sr_guard', active: true, lastLogin: '2026-03-20' },
-  { uid: '4', name: 'Emma Knab', email: 'emma@sfac.org', positionId: 'lifeguard', active: true, lastLogin: '2026-03-18' },
-  { uid: '5', name: 'Bryan Jung', email: 'bryan@sfac.org', positionId: 'lifeguard', active: false, lastLogin: '2026-03-10' },
-];
-
-function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <button
-      onClick={() => !disabled && onChange(!on)}
-      disabled={disabled}
-      style={{
-        width: 40, height: 22, borderRadius: 11, border: 'none', cursor: disabled ? 'not-allowed' : 'pointer',
-        background: on ? 'var(--aqua-500)' : 'var(--bg-elevated)',
-        position: 'relative', transition: 'background 200ms', flexShrink: 0,
-        boxShadow: on ? '0 0 8px rgba(0,184,224,0.4)' : 'none',
-        opacity: disabled ? 0.4 : 1,
-      }}
-    >
-      <span style={{
-        position: 'absolute', top: 3, left: on ? 21 : 3, width: 16, height: 16,
-        borderRadius: '50%', background: 'white', transition: 'left 200ms',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-      }} />
-    </button>
-  );
+interface AdminCard {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  href: string;
+  badge?: string;
 }
 
-export default function AdminPage() {
-  const { user, firebaseUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTab>('positions');
-  const [positions, setPositions] = useState<Position[]>(DEFAULT_POSITIONS);
-  const [selectedPositionId, setSelectedPositionId] = useState<string>('sr_guard');
-  const [docs, setDocs] = useState(DEMO_DOCS);
-  const [shifts, setShifts] = useState<ShiftDefinition[]>(DEFAULT_SHIFTS);
-  const [users, setUsers] = useState(MOCK_USERS);
-  const [usersLoading, setUsersLoading] = useState(true);
-  const [actionStatus, setActionStatus] = useState('');
-  const [accessStaff, setAccessStaff] = useState<StaffMember[]>([]);
-  const [accessLoading, setAccessLoading] = useState(true);
-  const [showNewPositionModal, setShowNewPositionModal] = useState(false);
-  const [newPosName, setNewPosName] = useState('');
-  const [newPosColor, setNewPosColor] = useState('#00d4ff');
-  const [showInviteModal, setShowInviteModal] = useState(false);
+const ADMIN_CARDS: AdminCard[] = [
+  {
+    id: 'staff',
+    title: 'Staff Directory',
+    description: 'Manage lifeguards, roles, positions, and certifications',
+    icon: '👥',
+    href: '/staff',
+  },
+  {
+    id: 'documents',
+    title: 'Documents Library',
+    description: 'Upload and manage checklists, forms, and training materials',
+    icon: '📁',
+    href: '/admin/documents-library',
+  },
+  {
+    id: 'positions',
+    title: 'Positions & Roles',
+    description: 'Configure custom positions and manage role permissions',
+    icon: '🏷️',
+    href: '/admin/positions',
+  },
+  {
+    id: 'shifts',
+    title: 'Shift Templates',
+    description: 'Define shift schedules and daily task templates',
+    icon: '🕐',
+    href: '/admin/shifts',
+  },
+  {
+    id: 'audits',
+    title: 'Audit Configuration',
+    description: 'Set up and manage audit types and renewal requirements',
+    icon: '✓',
+    href: '/admin/audits',
+  },
+  {
+    id: 'access',
+    title: 'Access & Permissions',
+    description: 'Manage user access levels and document visibility',
+    icon: '🔐',
+    href: '/admin/access',
+  },
+];
 
-  const isAdmin = user?.role === 'admin';
+export default function AdminPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const isAdmin = user?.roleTier === 'admin';
 
   if (!isAdmin) {
     return (
@@ -112,158 +76,106 @@ export default function AdminPage() {
     );
   }
 
-  const selectedPosition = positions.find(p => p.id === selectedPositionId)!;
-
-  const updatePermission = (key: keyof PositionPermissions, value: boolean) => {
-    if (selectedPositionId === 'admin') return; // admin perms are locked
-    setPositions(prev => prev.map(p =>
-      p.id === selectedPositionId
-        ? { ...p, permissions: { ...p.permissions, [key]: value } }
-        : p
-    ));
-  };
-
-  const toggleDocAccess = (docId: string, positionId: string) => {
-    setDocs(prev => prev.map(d => {
-      if (d.id !== docId) return d;
-      const current = d.accessPositions;
-      if (positionId === 'admin') return d; // admin always has access
-      const has = current.includes(positionId);
-      return { ...d, accessPositions: has ? current.filter(p => p !== positionId) : [...current, positionId] };
-    }));
-  };
-
-  const setDocAdminOnly = (docId: string) => {
-    setDocs(prev => prev.map(d => d.id === docId ? { ...d, accessPositions: ['admin'] } : d));
-  };
-
-  const addPosition = () => {
-    if (!newPosName.trim()) return;
-    const newPos: Position = {
-      id: `custom-${Date.now()}`,
-      name: newPosName,
-      color: newPosColor,
-      isBuiltIn: false,
-      rank: positions.length,
-      permissions: { ...DEFAULT_POSITIONS[3].permissions }, // copy lifeguard defaults
-    };
-    setPositions(prev => [...prev, newPos]);
-    setNewPosName('');
-    setShowNewPositionModal(false);
-    setSelectedPositionId(newPos.id);
-  };
-
-  const TABS: { key: AdminTab; label: string; icon: string }[] = [
-    { key: 'positions', label: 'Positions & Permissions', icon: '🏷' },
-    { key: 'documents', label: 'Document Access', icon: '🔐' },
-    { key: 'access', label: 'Access Control', icon: '🛂' },
-    { key: 'users', label: 'Users & Accounts', icon: '👤' },
-    { key: 'shifts', label: 'Shift Schedule', icon: '🕐' },
-    { key: 'history', label: 'Change History', icon: '📜' },
-  ];
-
-  useEffect(() => {
-    const fetchAccessStaff = async () => {
-      try {
-        const snap = await getDocs(collection(db, 'staff'));
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as StaffMember));
-        setAccessStaff(list);
-      } catch (err) {
-        console.error('Failed to load staff access', err);
-      } finally {
-        setAccessLoading(false);
-      }
-    };
-    fetchAccessStaff();
-  }, []);
-
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const snap = await getDocs(collection(db, 'users'));
-        const list = snap.docs.map(d => {
-          const data = d.data();
-          return {
-            uid: d.id,
-            name: data.displayName || data.email || d.id,
-            email: data.email || '',
-            positionId: data.positionId || data.role || 'lifeguard',
-            active: data.disabled ? false : true,
-            lastLogin: data.lastLogin || '—',
-          };
-        });
-        setUsers(list);
-      } catch (err) {
-        console.error('Failed to load users', err);
-      } finally {
-        setUsersLoading(false);
-      }
-    };
-    fetchUsers();
-  }, []);
-
-  const callAdminAction = async (path: string, payload: Record<string, any>) => {
-    if (!firebaseUser) return { ok: false, error: 'Missing auth' };
-    const token = await firebaseUser.getIdToken();
-    const res = await fetch(path, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return { ok: false, error: data?.error || 'Request failed' };
-    }
-    return { ok: true, data };
-  };
-
   return (
     <div className="page-container animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="page-title">Admin Settings</h1>
-          <p className="page-subtitle">Manage positions, permissions, document access, and staff accounts</p>
-        </div>
-        <span className="badge badge-admin">⚙ Administrator</span>
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="page-title">Admin Control Panel</h1>
+        <p className="page-subtitle">Manage staff, documents, positions, and system configuration</p>
       </div>
 
-      {/* Tab Bar (horizontal scroll on mobile) */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border-subtle)', marginBottom: 28, overflowX: 'auto', paddingBottom: 0 }}>
-        {TABS.map(t => (
+      {/* Admin Cards Grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '16px',
+          marginBottom: '32px',
+        }}
+      >
+        {ADMIN_CARDS.map(card => (
           <button
-            key={t.key}
-            onClick={() => setActiveTab(t.key)}
+            key={card.id}
+            onClick={() => router.push(card.href)}
             style={{
-              padding: '10px 16px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === t.key ? '2px solid var(--aqua-500)' : '2px solid transparent',
-              color: activeTab === t.key ? 'var(--aqua-400)' : 'var(--text-secondary)',
-              fontFamily: 'inherit',
-              fontSize: '0.875rem',
-              fontWeight: 600,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              padding: '20px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '12px',
               cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              transition: 'all 200ms',
-              marginBottom: -1,
+              transition: 'all 200ms ease',
+              textAlign: 'left',
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
+            onMouseEnter={(e) => {
+              const el = e.currentTarget;
+              el.style.borderColor = 'var(--aqua-400)';
+              el.style.boxShadow = '0 4px 12px rgba(0, 184, 224, 0.1)';
+              el.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              const el = e.currentTarget;
+              el.style.borderColor = 'var(--border-color)';
+              el.style.boxShadow = 'none';
+              el.style.transform = 'translateY(0)';
             }}
           >
-            {t.icon} {t.label}
+            {/* Icon and Title Row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: '12px' }}>
+              <span style={{ fontSize: '28px' }}>{card.icon}</span>
+              {card.badge && <span className="badge badge-admin" style={{ marginLeft: 'auto' }}>{card.badge}</span>}
+            </div>
+
+            {/* Title */}
+            <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px', margin: 0 }}>{card.title}</h3>
+
+            {/* Description */}
+            <p
+              style={{
+                fontSize: '13px',
+                color: 'var(--text-muted)',
+                margin: 0,
+                marginBottom: '12px',
+                flex: 1,
+              }}
+            >
+              {card.description}
+            </p>
+
+            {/* Arrow */}
+            <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--aqua-400)' }}>
+              <span style={{ fontSize: '12px' }}>Manage</span>
+              <ChevronRight size={16} />
+            </div>
           </button>
         ))}
       </div>
 
-      {/* ━━━ POSITIONS & PERMISSIONS ━━━ */}
-      {activeTab === 'positions' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, alignItems: 'start' }}>
-          {/* Position List */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-xs text-muted" style={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>Positions</div>
-              <button className="btn btn-primary btn-sm" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={() => setShowNewPositionModal(true)}>+ Add</button>
+      {/* Info Box */}
+      <div
+        style={{
+          padding: '16px',
+          background: 'rgba(74, 222, 128, 0.05)',
+          border: '1px solid rgba(74, 222, 128, 0.2)',
+          borderRadius: '8px',
+          color: 'var(--text-secondary)',
+          fontSize: '13px',
+        }}
+      >
+        <p style={{ margin: 0, marginBottom: '8px' }}>
+          <strong>💡 Tip:</strong> Changes made in these sections affect all users and operations immediately.
+        </p>
+        <p style={{ margin: 0 }}>
+          For staff management, permissions, and certifications, see the <strong>Staff Directory</strong> page.
+        </p>
+      </div>
+    </div>
+  );
+}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {positions.map(p => (
@@ -340,16 +252,6 @@ export default function AdminPage() {
             {selectedPositionId !== 'admin' && (
               <div className="flex gap-3 mt-4">
                 <button className="btn btn-primary">Save Changes</button>
-                <button className="btn btn-ghost btn-sm">Reset to Default</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ━━━ DOCUMENT ACCESS ━━━ */}
-      {activeTab === 'documents' && (
-        <div>
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="section-title">Document Access Control</h2>

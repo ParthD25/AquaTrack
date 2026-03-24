@@ -107,25 +107,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userData = userDoc.exists() ? userDoc.data() : {};
           const staffData = staffDoc.exists() ? staffDoc.data() : {};
 
-          const positionId = userData.positionId || userData.role || staffData.positionId || staffData.role || 'lifeguard';
+          // Load roleTier (security tier) with fallback to role for backward compatibility
+          const roleTier = (userData.roleTier || userData.role || 'lifeguard') as UserRole;
+          
+          // Load positionId (job title) with fallback to roleTier if not set
+          const positionId = userData.positionId || userData.role || roleTier || 'lifeguard';
           
           // Try to load custom position
           let loadedPosition: Position | null = null;
           let computedPermissions: PositionPermissions | null = null;
 
-          loadedPosition = await loadUserPosition(positionId);
-          
-          if (loadedPosition) {
-            // Custom position found
-            computedPermissions = loadedPosition.permissions;
-          } else {
-            // Fall back to built-in role
-            // (permissions will be checked in components using built-in role)
-            computedPermissions = null;
+          if (!['admin', 'sr_guard', 'pool_tech', 'lifeguard'].includes(positionId)) {
+            // Custom position — load from Firestore
+            loadedPosition = await loadUserPosition(positionId);
+            if (loadedPosition) {
+              computedPermissions = loadedPosition.permissions;
+            }
           }
-
-          // Normalize to built-in role for backward compatibility in UI
-          const normalizedRole = normalizeRole(positionId) || 'lifeguard';
 
           const staffName = staffData.firstName && staffData.lastName
             ? `${staffData.firstName} ${staffData.lastName}`
@@ -136,10 +134,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             uid: fbUser.uid,
             email: fbUser.email || userData.email || '',
             displayName: resolvedName,
-            role: normalizedRole,
+            roleTier, // Security tier
+            positionId, // Job title
+            role: roleTier, // Backward compat: alias to roleTier
             photoURL: fbUser.photoURL ?? userData.photoURL ?? null,
             orgId: userData.orgId || staffData.orgId || 'sfac',
-            positionId: positionId, // Store actual positionId
             ...userData,
           } as AppUser;
 
@@ -191,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasRole = (...roles: UserRole[]) => {
     if (!user) return false;
-    return roles.includes(user.role);
+    return roles.includes(user.roleTier);
   };
 
   /**

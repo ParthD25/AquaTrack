@@ -7,12 +7,14 @@ export interface AppUser {
   uid: string;
   email: string;
   displayName: string;
-  role: UserRole; // Normalized to built-in role for backward compatibility
-  positionId?: string; // Actual position ID (can be custom or built-in)
+  roleTier: UserRole; // Security-only role: one of four built-in values
+  positionId: string; // Job title: can reference positions collection or a built-in role ID
   photoURL?: string;
   orgId: string;
   hasAgreedToTerms?: boolean;
   mustResetPassword?: boolean;
+  // Backward compatibility: alias to roleTier
+  role?: UserRole;
 }
 
 // A "Position" is the admin-configurable role definition.

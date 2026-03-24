@@ -103,8 +103,8 @@ export default function StaffDirectoryPage() {
     gradYear: new Date().getFullYear() + 2,
   });
 
-  const isAdmin = user?.role === 'admin';
-  const isSrGuard = user?.role === 'admin' || user?.role === 'sr_guard';
+  const isAdmin = user?.roleTier === 'admin';
+  const isSrGuard = user?.roleTier === 'admin' || user?.roleTier === 'sr_guard';
   const canSeeEmail = isSrGuard;
   const canSeeAddress = isAdmin;
 
@@ -172,7 +172,8 @@ export default function StaffDirectoryPage() {
   const changePosition = async (id: string, positionId: string) => {
     setStaff(prev => prev.map(s => s.id === id ? { ...s, positionId } : s));
     await updateDoc(doc(db, 'staff', id), { positionId }).catch(console.error);
-    await updateDoc(doc(db, 'users', id), { positionId, role: positionId }).catch(console.error);
+    // Update ONLY positionId in users doc, NEVER update role/roleTier when changing position
+    await updateDoc(doc(db, 'users', id), { positionId }).catch(console.error);
   };
 
   const deleteStaff = async (id: string) => {

@@ -557,8 +557,9 @@ class _DocsTabState extends State<_DocsTab> {
 
           final filtered = docs.where((d) {
             final category = d['category'] ?? 'operational';
-            if (_activeCategory != 'all' && category != _activeCategory)
+            if (_activeCategory != 'all' && category != _activeCategory) {
               return false;
+            }
             return true;
           }).toList();
 
@@ -918,7 +919,7 @@ class _InventoryTabState extends State<_InventoryTab> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _month,
+                  initialValue: _month,
                   items: _monthOptions()
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                       .toList(),
@@ -981,7 +982,7 @@ class _InventoryTabState extends State<_InventoryTab> {
                 ],
               ),
             );
-          }).toList(),
+          }),
           const SizedBox(height: 12),
           TextField(
             controller: _notesController,
@@ -1073,7 +1074,7 @@ class _AdminTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: positionId,
+                      initialValue: positionId,
                       dropdownColor: const Color(0xFF132040),
                       items: const [
                         DropdownMenuItem(

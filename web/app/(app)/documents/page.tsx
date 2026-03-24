@@ -109,11 +109,18 @@ export default function DocumentsPage() {
   useEffect(() => {
     const fetchDocs = async () => {
       try {
-        // Fetch from new documents_library collection
-        const snap = await getDocs(collection(db, 'documents_library'));
+        // Fetch from new documents collection (if available, fall back to documents_library)
+        let snap;
+        try {
+          snap = await getDocs(collection(db, 'documents'));
+        } catch {
+          // Fallback to old collection during transition
+          snap = await getDocs(collection(db, 'documents_library'));
+        }
+
         const docsData: DocItem[] = snap.docs
           .map(d => {
-            const data = d.data() as DocumentLibraryItem;
+            const data = d.data() as any;
             
             return {
               id: d.id,
@@ -122,9 +129,11 @@ export default function DocumentsPage() {
               category: data.category,
               type: data.type,
               fileUrl: data.fileUrl,
-              uploadedAt: data.uploadedAt,
+              uploadedAt: typeof data.uploadedAt === 'string' 
+                ? data.uploadedAt 
+                : data.uploadedAt?.toDate?.()?.toISOString?.() || new Date().toISOString(),
               uploadedBy: data.uploadedBy,
-              tags: data.tags,
+              tags: data.tags || [],
               accessRoles: data.accessRoles as UserRole[],
             };
           })
